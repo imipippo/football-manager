@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+mobile/node_modules/
+
+# Build outputs
+backend/dist/
+mobile/android/app/build/
+mobile/android/build/
+mobile/android/.gradle/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment
+.env
+.env.local
+backend/.env
+
+# Logs
+*.log
+debug.log
+npm-debug.log*
+*.hprof
+
+# AVD / Emulator
+avd/
+**/hardware-qemu.ini.lock/
+**/multiinstance.lock
+
+# Temporary files
+hermes-*/
+hermes-*.aar
+*.keystore
+!android/app/debug.keystore
+
+# Cache
+.cache/
+*.cache

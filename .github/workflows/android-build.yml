@@ -1,0 +1,94 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    name: Build Debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install npm dependencies
+        working-directory: mobile
+        run: npm ci --legacy-peer-deps
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Grant execute permission for Gradle
+        run: chmod +x mobile/android/gradlew
+
+      - name: Build Debug APK
+        working-directory: mobile/android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-apk
+          path: mobile/android/app/build/outputs/apk/debug/*.apk
+          retention-days: 30
+
+  build-release:
+    name: Build Release APK
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || (github.ref == 'refs/heads/main' && github.event_name == 'push')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install npm dependencies
+        working-directory: mobile
+        run: npm ci --legacy-peer-deps
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Grant execute permission for Gradle
+        run: chmod +x mobile/android/gradlew
+
+      - name: Build Release APK (Signed with debug key)
+        working-directory: mobile/android
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: mobile/android/app/build/outputs/apk/release/*.apk
+          retention-days: 90

@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: football-manager-backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - MONGODB_URI=mongodb://mongodb:27017/football-manager
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your-jwt-secret-change-in-production
+      - JWT_EXPIRES_IN=7d
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - football-manager-network
+
+  mongodb:
+    image: mongo:7.0
+    container_name: football-manager-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=football-manager
+    networks:
+      - football-manager-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: football-manager-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - football-manager-network
+
+volumes:
+  mongodb_data:
+  redis_data:
+
+networks:
+  football-manager-network:
+    driver: bridge

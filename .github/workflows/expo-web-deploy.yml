@@ -44,6 +44,15 @@ jobs:
         working-directory: mobile
         run: npx expo export --platform web
 
+      - name: Copy static web files (SPA routing support)
+        run: |
+          if [ -d "mobile/web" ]; then
+            cp -r mobile/web/* mobile/dist/ || true
+          fi
+          
+      - name: Verify build output
+        run: ls -la mobile/dist/
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 

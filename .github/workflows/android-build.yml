@@ -36,6 +36,18 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Generate Debug Keystore
+        run: |
+          keytool -genkeypair \
+            -v -keystore mobile/android/app/debug.keystore \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+
       - name: Grant execute permission for Gradle
         run: chmod +x mobile/android/gradlew
 
@@ -78,6 +90,18 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+
+      - name: Generate Debug Keystore
+        run: |
+          keytool -genkeypair \
+            -v -keystore mobile/android/app/debug.keystore \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
 
       - name: Grant execute permission for Gradle
         run: chmod +x mobile/android/gradlew

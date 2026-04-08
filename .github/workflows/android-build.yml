@@ -25,7 +25,10 @@ jobs:
 
       - name: Install npm dependencies
         working-directory: mobile
-        run: npm ci --legacy-peer-deps
+        run: |
+          echo "=== Starting npm ci ==="
+          npm ci --legacy-peer-deps 2>&1 | tee npm-install.log
+          echo "=== npm ci finished with exit code $? ==="
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -53,9 +56,24 @@ jobs:
 
       - name: Build Debug APK
         working-directory: mobile/android
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: |
+          echo "=== Starting Gradle build ==="
+          export NODE_OPTIONS="--max-old-space-size=4096"
+          ./gradlew assembleDebug --no-daemon --stacktrace --info 2>&1 | tee gradle-build.log
+          echo "=== Gradle build finished with exit code $? ==="
+
+      - name: Upload build logs (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            mobile/npm-install.log
+            mobile/android/gradle-build.log
+          retention-days: 7
 
       - name: Upload Debug APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: debug-apk
@@ -111,6 +129,7 @@ jobs:
         run: ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Upload Release APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: release-apk

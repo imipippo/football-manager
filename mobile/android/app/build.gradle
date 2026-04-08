@@ -8,7 +8,6 @@ react {
     root = file("../../")
     jsRootDir = file("../../")
     libraryName = "FootballManagerApp"
-    codegenDir = file("../../node_modules/@react-native/codegen/generated")
 }
 
 android {

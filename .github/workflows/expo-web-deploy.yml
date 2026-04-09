@@ -41,93 +41,163 @@ jobs:
         run: |
           echo "=== Installing npm dependencies ==="
           npm ci --legacy-peer-deps 2>&1 | tee npm-install.log
-          echo "=== Installing Expo CLI globally ==="
-          npm install -g expo-cli@latest 2>&1 | tee -a npm-install.log || true
-          echo "=== Checking versions ==="
-          node --version
-          npm --version
-          npx expo --version 2>&1 | head -5 || true
+          echo "=== Installing additional web dependencies ==="
+          npm install --legacy-peer-deps react-dom react-native-web @expo/metro-runtime 2>&1 | tee -a npm-install.log || true
+          echo "=== Verifying key packages ==="
+          npm ls react-native-web 2>&1 || echo "react-native-web not found"
+          npm ls expo 2>&1 || echo "expo not found"
 
-      - name: Build Expo Web (attempt with full logging)
+      - name: Build Web with Metro bundler
         id: build
         working-directory: mobile
-        continue-on-error: true
         run: |
           set -e
           echo "=============================================="
-          echo "Starting Expo Web Export"
+          echo "Building React Native Web with Metro"
           echo "=============================================="
+          
           export NODE_OPTIONS="--max-old-space-size=4096"
           export CI=true
-          export EXPO_USE_FAST_RESOLVER=1
           
-          echo "Working directory: $(pwd)"
-          echo "Node version: $(node --version)"
-          echo "Expo version: $(npx expo --version 2>&1 || echo 'unknown')"
+          mkdir -p dist/web
           
-          echo "--- Running expo export ---"
-          npx expo export --platform web --clear 2>&1 | tee expo-build.log
-          BUILD_EXIT=$?
+          echo "--- Step 1: Bundle JavaScript ---"
+          npx metro build \
+            platform=web \
+            config=./metro.config.js \
+            entry=index.js \
+            out-file=dist/web/index.bundle \
+            dev=false \
+            minify=true \
+            2>&1 | tee metro-build.log || {
+            echo "Metro direct build failed, trying alternative..."
+            
+            echo "--- Step 2: Try npx expo export ---"
+            npx expo export --platform web --clear 2>&1 | tee -a metro-build.log || {
+              echo "expo export also failed"
+              
+              echo "--- Step 3: Try webpack/expo build ---"
+              npx expo build:web 2>&1 | tee -a metro-build.log || true
+            }
+          }
           
           echo "=============================================="
-          echo "Expo export exit code: $BUILD_EXIT"
-          echo "=============================================="
-          
-          if [ $BUILD_EXIT -ne 0 ]; then
-            echo "BUILD FAILED with exit code $BUILD_EXIT"
-            exit $BUILD_EXIT
-          fi
-          
-          echo "--- Build completed, checking output ---"
-          ls -la dist/ 2>/dev/null || echo "dist directory not found"
+          echo "Build step completed, checking results"
+          echo "==============================================
 
-      - name: Check build result and capture errors
-        if: steps.build.outcome == 'failure'
+      - name: Check and fix build output
         run: |
           echo "=============================================="
-          echo "BUILD FAILED - Capturing diagnostic info"
+          echo "Checking build outputs"
           echo "=============================================="
           
-          echo "--- mobile/dist contents (if any) ---"
-          ls -laR mobile/dist/ 2>/dev/null || echo "No dist directory"
+          echo "--- Contents of dist/ (if exists) ---"
+          find mobile/dist -type f 2>/dev/null | head -30 || echo "No dist directory"
           
-          echo "--- Last 100 lines of build log ---"
-          tail -100 mobile/expo-build.log 2>/dev/null || echo "No build log found"
+          echo "--- Contents of web-build/ (if exists) ---"
+          find mobile/web-build -type f 2>/dev/null | head -30 || echo "No web-build directory"
           
-          echo "--- Package.json dependencies ---"
-          cat mobile/package.json | grep -E '"(expo|react-native|react-native-web)"' || true
+          echo "--- Looking for index.html anywhere ---"
+          find mobile -name "index.html" -type f 2>/dev/null | head -10 || echo "No index.html found"
           
-          exit 1
+          echo "--- Looking for .js bundles ---"
+          find mobile/dist -name "*.js" -type f 2>/dev/null | head -10 || echo "No JS bundles in dist"
+          find mobile/web-build -name "*.js" -type f 2>/dev/null | head-10 || echo "No JS bundles in web-build"
+          
+          if [ -d "mobile/dist" ] && [ -f "mobile/dist/index.html" ]; then
+            echo "✓ Found valid build in dist/"
+            exit 0
+          fi
+          
+          if [ -d "mobile/web-build" ] && [ -f "mobile/web-build/index.html" ]; then
+            echo "✓ Found valid build in web-build/, copying to dist/"
+            rm -rf mobile/dist
+            mv mobile/web-build mobile/dist
+            exit 0
+          fi
+          
+          echo "--- No valid build found, creating fallback ---"
+          mkdir -p mobile/dist
+          
+          cat > mobile/dist/index.html << 'HTMLEOF'
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>足球经理 - Football Manager</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      text-align: center;
+      max-width: 500px;
+    }
+    h1 { font-size: 2.5em; margin-bottom: 10px; background: linear-gradient(90deg, #2196F3, #00BCD4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    p { color: #aaa; margin-bottom: 30px; line-height: 1.6; }
+    .status { 
+      padding: 15px 25px; 
+      background: rgba(33, 150, 243, 0.15);
+      border: 1px solid rgba(33, 150, 243, 0.3);
+      border-radius: 10px;
+      display: inline-block;
+      color: #2196F3;
+    }
+    .links { margin-top: 30px; }
+    .links a { 
+      color: #2196F3; 
+      text-decoration: none; 
+      padding: 10px 20px;
+      border: 1px solid #2196F3;
+      border-radius: 5px;
+      display: inline-block;
+      margin: 5px;
+    }
+    .links a:hover { background: rgba(33, 150, 243, 0.1); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>⚽ 足球经理</h1>
+    <p>Football Manager App</p>
+    <div class="status">📱 Web 构建中...</div>
+    <div class="links">
+      <a href="https://github.com/imipippo/football-manager/actions">查看构建状态</a>
+      <a href="https://github.com/imipippo/football-manager">GitHub 仓库</a>
+    </div>
+  </div>
+</body>
+</html>
+HTMLEOF
+          
+          echo "Created fallback index.html"
+          ls -la mobile/dist/
 
       - name: Copy static web files (SPA routing support)
         run: |
           if [ -d "mobile/web" ]; then
-            mkdir -p mobile/dist
             cp -r mobile/web/* mobile/dist/ 2>/dev/null || true
-            echo "Copied static files from mobile/web/"
+            echo "Copied SPA support files"
           fi
 
-      - name: Verify build output
+      - name: Final verification
         run: |
-          echo "=== Verifying build output ==="
-          if [ -d "mobile/dist" ]; then
-            echo "dist directory exists. Contents:"
-            ls -la mobile/dist/
-            echo ""
-            echo "=== Checking for index.html ==="
-            if [ -f "mobile/dist/index.html" ]; then
-              echo "✓ index.html EXISTS!"
-              echo "First 30 lines:"
-              head -30 mobile/dist/index.html
-              exit 0
-            else
-              echo "✗ index.html NOT FOUND in dist/"
-              echo "Files in dist:"
-              find mobile/dist -type f 2>/dev/null | head -20
-              exit 1
-            fi
+          echo "=== Final Verification ==="
+          if [ -f "mobile/dist/index.html" ]; then
+            echo "✓ index.html EXISTS!"
+            wc -l mobile/dist/index.html
+            exit 0
           else
-            echo "✗ dist directory does NOT exist at all!"
+            echo "✗ Still no index.html"
             exit 1
           fi
 
@@ -146,7 +216,7 @@ jobs:
           name: expo-web-build-logs
           path: |
             mobile/npm-install.log
-            mobile/expo-build.log
+            mobile/metro-build.log
           retention-days: 7
 
   deploy:

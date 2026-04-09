@@ -42,49 +42,92 @@ jobs:
           echo "=== Installing npm dependencies ==="
           npm ci --legacy-peer-deps 2>&1 | tee npm-install.log
           echo "=== Installing Expo CLI globally ==="
-          npm install -g expo@latest 2>&1 | tee -a npm-install.log
+          npm install -g expo-cli@latest 2>&1 | tee -a npm-install.log || true
           echo "=== Checking versions ==="
           node --version
           npm --version
-          npx expo --version || echo "Expo version check done"
+          npx expo --version 2>&1 | head -5 || true
 
-      - name: Build Expo Web
+      - name: Build Expo Web (attempt with full logging)
+        id: build
         working-directory: mobile
+        continue-on-error: true
         run: |
-          echo "=== Starting Expo Web Export ==="
+          set -e
+          echo "=============================================="
+          echo "Starting Expo Web Export"
+          echo "=============================================="
           export NODE_OPTIONS="--max-old-space-size=4096"
+          export CI=true
+          export EXPO_USE_FAST_RESOLVER=1
+          
+          echo "Working directory: $(pwd)"
+          echo "Node version: $(node --version)"
+          echo "Expo version: $(npx expo --version 2>&1 || echo 'unknown')"
+          
+          echo "--- Running expo export ---"
           npx expo export --platform web --clear 2>&1 | tee expo-build.log
-          EXIT_CODE=$?
-          echo "=== Expo build finished with exit code: $EXIT_CODE ==="
-          if [ $EXIT_CODE -ne 0 ]; then
-            echo "=== Build failed, checking dist directory ==="
-            ls -la dist/ 2>/dev/null || echo "dist directory does not exist"
-            exit $EXIT_CODE
+          BUILD_EXIT=$?
+          
+          echo "=============================================="
+          echo "Expo export exit code: $BUILD_EXIT"
+          echo "=============================================="
+          
+          if [ $BUILD_EXIT -ne 0 ]; then
+            echo "BUILD FAILED with exit code $BUILD_EXIT"
+            exit $BUILD_EXIT
           fi
+          
+          echo "--- Build completed, checking output ---"
+          ls -la dist/ 2>/dev/null || echo "dist directory not found"
+
+      - name: Check build result and capture errors
+        if: steps.build.outcome == 'failure'
+        run: |
+          echo "=============================================="
+          echo "BUILD FAILED - Capturing diagnostic info"
+          echo "=============================================="
+          
+          echo "--- mobile/dist contents (if any) ---"
+          ls -laR mobile/dist/ 2>/dev/null || echo "No dist directory"
+          
+          echo "--- Last 100 lines of build log ---"
+          tail -100 mobile/expo-build.log 2>/dev/null || echo "No build log found"
+          
+          echo "--- Package.json dependencies ---"
+          cat mobile/package.json | grep -E '"(expo|react-native|react-native-web)"' || true
+          
+          exit 1
 
       - name: Copy static web files (SPA routing support)
         run: |
           if [ -d "mobile/web" ]; then
+            mkdir -p mobile/dist
             cp -r mobile/web/* mobile/dist/ 2>/dev/null || true
             echo "Copied static files from mobile/web/"
           fi
-          
+
       - name: Verify build output
         run: |
           echo "=== Verifying build output ==="
           if [ -d "mobile/dist" ]; then
+            echo "dist directory exists. Contents:"
             ls -la mobile/dist/
+            echo ""
             echo "=== Checking for index.html ==="
             if [ -f "mobile/dist/index.html" ]; then
-              echo "✓ index.html exists"
-              head -20 mobile/dist/index.html
+              echo "✓ index.html EXISTS!"
+              echo "First 30 lines:"
+              head -30 mobile/dist/index.html
+              exit 0
             else
-              echo "✗ index.html NOT FOUND!"
-              ls -la mobile/dist/ || echo "dist is empty or not found"
+              echo "✗ index.html NOT FOUND in dist/"
+              echo "Files in dist:"
+              find mobile/dist -type f 2>/dev/null | head -20
               exit 1
             fi
           else
-            echo "✗ dist directory does not exist!"
+            echo "✗ dist directory does NOT exist at all!"
             exit 1
           fi
 

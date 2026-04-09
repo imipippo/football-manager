@@ -39,6 +39,11 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Install specific NDK version
+        run: |
+          echo "y" | sdkmanager --install "ndk;25.2.9519653" || true
+          sdkmanager --list_installed | grep ndk || echo "Using default NDK"
+
       - name: Generate Debug Keystore
         run: |
           keytool -genkeypair \
@@ -57,16 +62,17 @@ jobs:
       - name: Build Debug APK
         working-directory: mobile/android
         run: |
-          echo "=== Starting Gradle build ==="
+          echo "=== Starting Gradle debug build ==="
           export NODE_OPTIONS="--max-old-space-size=4096"
+          export ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/25.2.9519653
           ./gradlew assembleDebug --no-daemon --stacktrace --info 2>&1 | tee gradle-build.log
-          echo "=== Gradle build finished with exit code $? ==="
+          echo "=== Gradle debug build finished with exit code $? ==="
 
       - name: Upload build logs (always)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-logs
+          name: debug-build-logs
           path: |
             mobile/npm-install.log
             mobile/android/gradle-build.log
@@ -98,7 +104,10 @@ jobs:
 
       - name: Install npm dependencies
         working-directory: mobile
-        run: npm ci --legacy-peer-deps
+        run: |
+          echo "=== Starting npm ci for release ==="
+          npm ci --legacy-peer-deps 2>&1 | tee npm-install.log
+          echo "=== npm ci finished with exit code $? ==="
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -109,7 +118,12 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Generate Debug Keystore
+      - name: Install specific NDK version
+        run: |
+          echo "y" | sdkmanager --install "ndk;25.2.9519653"
+          sdkmanager --list installed | grep ndk
+
+      - name: Generate Signing Keystore
         run: |
           keytool -genkeypair \
             -v -keystore mobile/android/app/debug.keystore \
@@ -124,9 +138,24 @@ jobs:
       - name: Grant execute permission for Gradle
         run: chmod +x mobile/android/gradlew
 
-      - name: Build Release APK (Signed with debug key)
+      - name: Build Release APK (Signed)
         working-directory: mobile/android
-        run: ./gradlew assembleRelease --no-daemon --stacktrace
+        run: |
+          echo "=== Starting Gradle release build ==="
+          export NODE_OPTIONS="--max-old-space-size=4096"
+          export ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/25.2.9519653
+          ./gradlew assembleRelease --no-daemon --stacktrace --info 2>&1 | tee gradle-build.log
+          echo "=== Gradle release build finished with exit code $? ==="
+
+      - name: Upload build logs (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-build-logs
+          path: |
+            mobile/npm-install.log
+            mobile/android/gradle-build.log
+          retention-days: 7
 
       - name: Upload Release APK
         if: success()

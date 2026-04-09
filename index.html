@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>⚽ 足球经理 - Football Manager</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+      background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);
+      color:#fff;
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:20px;
+    }
+    .container{text-align:center;max-width:600px}
+    .logo{font-size:4em;margin-bottom:20px}
+    h1{
+      font-size:2.5em;
+      margin-bottom:10px;
+      background:linear-gradient(90deg,#2196F3,#00BCD4,#4CAF50);
+      -webkit-background-clip:text;
+      -webkit-text-fill-color:transparent;
+      background-clip:text;
+    }
+    .subtitle{color:#888;font-size:1.1em;margin-bottom:30px}
+    .card{
+      background:rgba(255,255,255,0.05);
+      border:1px solid rgba(255,255,255,0.1);
+      border-radius:16px;
+      padding:25px;
+      margin:20px 0;
+      backdrop-filter:blur(10px);
+    }
+    .status{
+      display:inline-block;
+      padding:10px 20px;
+      background:rgba(76,175,80,0.15);
+      border:1px solid rgba(76,175,80,0.3);
+      border-radius:8px;
+      color:#4CAF50;
+      margin:15px 0;
+    }
+    .links{margin-top:25px}
+    .links a{
+      display:inline-block;
+      color:#2196F3;
+      text-decoration:none;
+      padding:12px 24px;
+      border:1px solid #2196F3;
+      border-radius:8px;
+      margin:5px;
+      transition:all 0.3s
+    }
+    .links a:hover{background:rgba(33,150,243,0.15)}
+    .features{display:flex;justify-content:center;gap:15px;flex-wrap:wrap;margin-top:20px}
+    .feature{
+      background:rgba(33,150,243,0.1);
+      border:1px solid rgba(33,150,243,0.2);
+      border-radius:10px;
+      padding:12px 18px;
+      font-size:0.9em;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">⚽</div>
+    <h1>足球经理</h1>
+    <p class="subtitle">Football Manager App</p>
+    
+    <div class="card">
+      <div class="status">📱 应用开发中...</div>
+      <p style="color:#aaa;margin-top:15px;line-height:1.6">
+        Web 版本正在构建中，请稍后刷新页面<br>
+        或下载 APK 在手机上体验完整功能
+      </p>
+      
+      <div class="links">
+        <a href="https://github.com/imipippo/football-manager/actions">🔨 查看构建状态</a>
+        <a href="https://github.com/imipippo/football-manager">📂 GitHub 仓库</a>
+      </div>
+    </div>
+    
+    <div class="features">
+      <div class="feature">🎮 球队管理</div>
+      <div class="feature">⚽ 战术设置</div>
+      <div class="feature">📊 数据分析</div>
+      <div class="feature">🏆 联赛系统</div>
+    </div>
+  </div>
+</body>
+</html>

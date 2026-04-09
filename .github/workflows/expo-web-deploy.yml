@@ -38,20 +38,55 @@ jobs:
 
       - name: Install dependencies
         working-directory: mobile
-        run: npm ci --legacy-peer-deps
+        run: |
+          echo "=== Installing npm dependencies ==="
+          npm ci --legacy-peer-deps 2>&1 | tee npm-install.log
+          echo "=== Installing Expo CLI globally ==="
+          npm install -g expo@latest 2>&1 | tee -a npm-install.log
+          echo "=== Checking versions ==="
+          node --version
+          npm --version
+          npx expo --version || echo "Expo version check done"
 
       - name: Build Expo Web
         working-directory: mobile
-        run: npx expo export --platform web
+        run: |
+          echo "=== Starting Expo Web Export ==="
+          export NODE_OPTIONS="--max-old-space-size=4096"
+          npx expo export --platform web --clear 2>&1 | tee expo-build.log
+          EXIT_CODE=$?
+          echo "=== Expo build finished with exit code: $EXIT_CODE ==="
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "=== Build failed, checking dist directory ==="
+            ls -la dist/ 2>/dev/null || echo "dist directory does not exist"
+            exit $EXIT_CODE
+          fi
 
       - name: Copy static web files (SPA routing support)
         run: |
           if [ -d "mobile/web" ]; then
-            cp -r mobile/web/* mobile/dist/ || true
+            cp -r mobile/web/* mobile/dist/ 2>/dev/null || true
+            echo "Copied static files from mobile/web/"
           fi
           
       - name: Verify build output
-        run: ls -la mobile/dist/
+        run: |
+          echo "=== Verifying build output ==="
+          if [ -d "mobile/dist" ]; then
+            ls -la mobile/dist/
+            echo "=== Checking for index.html ==="
+            if [ -f "mobile/dist/index.html" ]; then
+              echo "✓ index.html exists"
+              head -20 mobile/dist/index.html
+            else
+              echo "✗ index.html NOT FOUND!"
+              ls -la mobile/dist/ || echo "dist is empty or not found"
+              exit 1
+            fi
+          else
+            echo "✗ dist directory does not exist!"
+            exit 1
+          fi
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -60,6 +95,16 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: mobile/dist
+
+      - name: Upload build logs (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: expo-web-build-logs
+          path: |
+            mobile/npm-install.log
+            mobile/expo-build.log
+          retention-days: 7
 
   deploy:
     environment:

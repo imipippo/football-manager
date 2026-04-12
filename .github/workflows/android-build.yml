@@ -82,121 +82,42 @@ jobs:
       - name: Grant execute permission for Gradle
         run: chmod +x mobile/android/gradlew
 
-      - name: Create fix script
+      - name: Create and run fix script
         run: |
-          cat > /tmp/fix_build.py << 'ENDOFSCRIPT'
-          import re
-          
-          # Fix 1: Remove hermesEnabled from wrong location in app/build.gradle
-          app_build = "mobile/android/app/build.gradle"
-          with open(app_build, 'r') as f:
-              content = f.read()
-          lines = content.split('\n')
-          lines = [l for l in lines if not (l.strip().startswith('hermesEnabled') and '=' in l)]
-          content = '\n'.join(lines)
-          with open(app_build, 'w') as f:
-              f.write(content)
-          print("Fix 1: Removed hermesEnabled")
-          
-          # Fix 2: Upgrade AGP to 8.7.0 (required by androidx.core:1.16.0)
-          # Check all possible locations where AGP version is defined
-          
-          files_to_check = [
-              "mobile/android/settings.gradle",
-              "mobile/android/build.gradle",
-          ]
-          
-          # Also check for version catalog
-          import os
-          for root, dirs, files in os.walk("mobile/android"):
-              for f in files:
-                  if f.endswith('.toml'):
-                      files_to_check.append(os.path.join(root, f))
-          
-          agp_upgraded = False
-          
-          for filepath in files_to_check:
-              if not os.path.exists(filepath):
-                  continue
-              
-              with open(filepath, 'r') as f:
-                  content = f.read()
-              
-              original = content
-              
-              # Pattern 1: classpath('com.android.tools.build:gradle:VERSION')
-              content = re.sub(
-                  r"com\.android\.tools\.build:gradle:[0-9][0-9]*\.[0-9]+[\.0-9]*",
-                  "com.android.tools.build:gradle:8.7.0",
-                  content
-              )
-              
-              # Pattern 2: id("com.android.application") version "VERSION"
-              content = re.sub(
-                  r'id\("com\.android\.application"\)\s+version\s+"[0-9][0-9]*\.[0-9]+"',
-                  'id("com.android.application") version "8.7.0"',
-                  content
-              )
-              
-              # Pattern 3: agp = "VERSION" or androidGradlePlugin = "VERSION"
-              content = re.sub(
-                  r'(agp|androidGradlePlugin)\s*=\s*"[0-9][0-9]*\.[0-9]+"',
-                  r'\1 = "8.7.0"',
-                  content
-              )
-              
-              # Pattern 4: version = { agp = "VERSION" }
-              content = re.sub(
-                  r'(version\s*=\s*\{[^}]*)(agp\s*=\s*)"[0-9][0-9]*\.[0-9]+"',
-                  r'\1\2"8.7.0"',
-                  content,
-                  flags=re.DOTALL
-              )
-              
-              if content != original:
-                  with open(filepath, 'w') as f:
-                      f.write(content)
-                  print(f"Fix 2: Upgraded AGP in {filepath}")
-                  agp_upgraded = True
-          
-          if not agp_upgraded:
-              print("WARNING: Could not find AGP version to upgrade, trying fallback...")
-              # Fallback: create/modify settings.gradle with pluginManagement
-              settings_file = "mobile/android/settings.gradle"
-              if os.path.exists(settings_file):
-                  with open(settings_file, 'r') as f:
-                      content = f.read()
-                  
-                  if 'pluginManagement' not in content:
-                      # Prepend pluginManagement block
-                      plugin_mgmt = """
-          pluginManagement {
-              plugins {
-                  id("com.android.application") version "8.7.0" apply false
-                  id("com.android.library") version "8.7.0" apply false
-                  id("org.jetbrains.kotlin.android") version "1.9.22" apply false
-              }
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
-          }
-          """
-                      content = plugin_mgmt + '\n' + content
-                      with open(settings_file, 'w') as f:
-                          f.write(content)
-                      print("Fix 2b: Added pluginManagement to settings.gradle")
-          
-          print("Fix script completed!")
-          ENDOFSCRIPT
-          echo "Fix script created"
-
-      - name: Run fix script
-        run: python3 /tmp/fix_build.py
+          echo 'import re,os' > /tmp/fix_build.py
+          echo 'app_build="mobile/android/app/build.gradle"' >> /tmp/fix_build.py
+          echo 'with open(app_build,"r") as f:c=f.read()' >> /tmp/fix_build.py
+          echo 'lines=[l for l in c.split(chr(10)) if not(l.strip().startswith("hermesEnabled") and"="in l)]' >> /tmp/fix_build.py
+          echo 'with open(app_build,"w") as f:f.write(chr(10).join(lines))' >> /tmp/fix_build.py
+          echo 'print("Fix1: Removed hermesEnabled")' >> /tmp/fix_build.py
+          echo '' >> /tmp/fix_build.py
+          echo 'files_to_check=["mobile/android/settings.gradle","mobile/android/build.gradle"]' >> /tmp/fix_build.py
+          echo 'for root,dirs,files in os.walk("mobile/android"):' >> /tmp/fix_build.py
+          echo '  [files_to_check.append(os.path.join(root,f)) for f in files if f.endswith(".toml")]' >> /tmp/fix_build.py
+          echo '' >> /tmp/fix_build.py
+          echo 'agp_upgraded=False' >> /tmp/fix_build.py
+          echo 'for fp in files_to_check:' >> /tmp/fix_build.py
+          echo '  if not os.path.exists(fp):continue' >> /tmp/fix_build.py
+          echo '  with open(fp) as f:content=f.read();orig=content' >> /tmp/fix_build.py
+          echo '  content=re.sub(r"com\\.android\\.tools\\.build:gradle:[0-9][0-9]*\\.[0-9]+[\\.0-9]*","com.android.tools.build:gradle:8.7.0",content)' >> /tmp/fix_build.py
+          echo '  content=re.sub(r"id\\(\"com\\.android\\.application\"\\)\\s+version\\s+\"[0-9][0-9]*\\.[0-9]+\"","id(\"com.android.application\") version \"8.7.0\"",content)' >> /tmp/fix_build.py
+          echo '  content=re.sub(r"(agp|androidGradlePlugin)\\s*=\\s*\"[0-9][0-9]*\\.[0-9]+\"","\\\\1 = \"8.7.0\"",content)' >> /tmp/fix_build.py
+          echo '  if content!=orig:' >> /tmp/fix_build.py
+          echo '    with open(fp,"w") as f:f.write(content);print(f"AGP upgraded: {fp}");agp_upgraded=True' >> /tmp/fix_build.py
+          echo '' >> /tmp/fix_build.py
+          echo 'if not agp_upgraded:' >> /tmp/fix_build.py
+          echo '  sf="mobile/android/settings.gradle"' >> /tmp/fix_build.py
+          echo '  if os.path.exists(sf):' >> /tmp/fix_build.py
+          echo '    with open(sf) as c:content=c.read()' >> /tmp/fix_build.py
+          echo '    if "pluginManagement" not in content:' >> /tmp/fix_break.py
+          echo '      pm=\'pluginManagement{plugins{id("com.android.application")version"8.7.0"apply false id("com.android.library")version"8.7.0"apply false id("org.jetbrains.kotlin.android")version"1.9.22"apply false}repositories{google()mavenCentral()gradlePluginPortal()}\'' >> /tmp/fix_build.py
+          echo '      content=pm+chr(10)+content' >> /tmp/fix_build.py
+          echo '      with open(sf,"w") as f:f.write(content);print("Added pluginManagement")' >> /tmp/fix_build.py
+          echo 'print("Done!")' >> /tmp/fix_build.py
+          python3 /tmp/fix_build.py
 
       - name: Verify AGP upgrade
-          run: |
+        run: |
           echo "=== Checking AGP version in all files ==="
           grep -rn "8\.[5-7]\." mobile/android/ --include="*.gradle*" --include="*.toml" --include="*.properties" 2>/dev/null || echo "No version refs found"
           echo ""
@@ -230,7 +151,7 @@ jobs:
           echo "=== Debug APK directory ==="
           ls -la mobile/android/app/build/outputs/apk/debug/ 2>/dev/null || echo "Debug directory not found"
           echo ""
-          echo "=== Release APK directory ==="
+          echo "=== Release APK directory ===
           ls -la mobile/android/app/build/outputs/apk/release/ 2>/dev/null || echo "Release directory not found"
 
       - name: Upload build logs (always)

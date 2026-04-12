@@ -39,10 +39,9 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install specific NDK version
+      - name: Accept Android licenses
         run: |
-          echo "y" | sdkmanager --install "ndk;25.2.9519653" || true
-          sdkmanager --list_installed | grep ndk || echo "Using default NDK"
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
 
       - name: Generate Debug Keystore
         run: |
@@ -64,19 +63,15 @@ jobs:
         run: |
           echo "=== Starting Gradle debug build ==="
           export NODE_OPTIONS="--max-old-space-size=4096"
-          export ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/25.2.9519653
           ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee gradle-build.log
           echo "=== Build exit code: $? ==="
 
       - name: Check and list APK files
         run: |
           echo "=== Checking for debug APK files ==="
+          find mobile/android/app/build -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
           if [ -d "mobile/android/app/build/outputs/apk/debug" ]; then
             ls -la mobile/android/app/build/outputs/apk/debug/
-            find mobile/android/app/build/outputs/apk/debug -name "*.apk" -type f
-          else
-            echo "Debug APK directory not found!"
-            find mobile/android/app/build -name "*.apk" -type f 2>/dev/null || echo "No APK files found anywhere"
           fi
 
       - name: Upload build logs (always)
@@ -130,10 +125,9 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install specific NDK version
+      - name: Accept Android licenses
         run: |
-          echo "y" | sdkmanager --install "ndk;25.2.9519653"
-          sdkmanager --list_installed | grep ndk || echo "NDK check complete"
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
 
       - name: Generate Signing Keystore
         run: |
@@ -155,19 +149,15 @@ jobs:
         run: |
           echo "=== Starting Gradle release build ==="
           export NODE_OPTIONS="--max-old-space-size=4096"
-          export ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/25.2.9519653
           ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee gradle-build.log
           echo "=== Build exit code: $? ==="
 
       - name: Check and list APK files
         run: |
           echo "=== Checking for release APK files ==="
+          find mobile/android/app/build -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
           if [ -d "mobile/android/app/build/outputs/apk/release" ]; then
             ls -la mobile/android/app/build/outputs/apk/release/
-            find mobile/android/app/build/outputs/apk/release -name "*.apk" -type f
-          else
-            echo "Release APK directory not found!"
-            find mobile/android/app/build -name "*.apk" -type f 2>/dev/null || echo "No APK files found anywhere"
           fi
 
       - name: Upload build logs (always)

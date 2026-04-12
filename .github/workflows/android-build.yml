@@ -147,6 +147,21 @@ jobs:
           done
           
           echo ""
+          echo "=== Fixing hermesEnabled property location ==="
+          # expo prebuild sometimes puts hermesEnabled inside dependencies block
+          # It should be at project level or inside android block, not in dependencies
+          if [ -f "app/build.gradle" ]; then
+            # Remove hermesEnabled from dependencies block if it's there
+            sed -i '/^[[:space:]]*hermesEnabled[[:space:]]*=/d' app/build.gradle
+            
+            # Add hermesEnabled as project ext property at the top of the file
+            sed -i '1i\ext { hermesEnabled = true }' app/build.gradle
+            
+            echo "--- Fixed app/build.gradle ---"
+            head -5 app/build.gradle
+          fi
+          
+          echo ""
           echo "=== Final verification ==="
           grep -rn "1\.16\.0" . --include="*.toml" --include="*.properties" --include="*.gradle*" 2>/dev/null && echo "WARNING: Still has 1.16.0!" || echo "SUCCESS: All downgraded to 1.13.1"
 

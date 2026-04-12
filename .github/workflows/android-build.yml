@@ -26,9 +26,11 @@ jobs:
       - name: Install npm dependencies
         working-directory: mobile
         run: |
-          echo "=== Starting npm ci ==="
-          npm ci --legacy-peer-deps 2>&1 | tee npm-install.log
-          echo "=== npm ci finished ==="
+          echo "=== Starting npm install ==="
+          npm install --legacy-peer-deps 2>&1 | tee npm-install.log
+          echo "=== Verifying expo installation ==="
+          npx expo --version || echo "expo not found"
+          echo "=== npm install finished ==="
 
       - name: Setup Java
         uses: actions/setup-java@v4

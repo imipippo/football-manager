@@ -9,7 +9,7 @@ on:
 
 jobs:
   build-android:
-    name: Build Debug APK
+    name: Build Debug & Release APK
     runs-on: ubuntu-latest
 
     steps:
@@ -55,6 +55,13 @@ jobs:
             -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US"
 
+      - name: Expo Prebuild - Generate Android Project
+        working-directory: mobile
+        run: |
+          echo "=== Running expo prebuild to generate native Android project ==="
+          npx expo prebuild --platform android --clean 2>&1 | tee prebuild.log
+          echo "=== Prebuild finished ==="
+
       - name: Grant execute permission for Gradle
         run: chmod +x mobile/android/gradlew
 
@@ -63,28 +70,41 @@ jobs:
         run: |
           echo "=== Starting Gradle debug build ==="
           export NODE_OPTIONS="--max-old-space-size=4096"
-          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee gradle-build.log
-          echo "=== Build exit code: $? ==="
+          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee gradle-debug.log
+          echo "=== Debug build exit code: $? ==="
 
-      - name: Check and list APK files
+      - name: Build Release APK
+        working-directory: mobile/android
         run: |
-          echo "=== Checking for debug APK files ==="
+          echo "=== Starting Gradle release build ==="
+          export NODE_OPTIONS="--max-old-space-size=4096"
+          ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee gradle-release.log
+          echo "=== Release build exit code: $? ==="
+
+      - name: Check and list all APK files
+        run: |
+          echo "=== Checking for ALL APK files ==="
           find mobile/android/app/build -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
-          if [ -d "mobile/android/app/build/outputs/apk/debug" ]; then
-            ls -la mobile/android/app/build/outputs/apk/debug/
-          fi
+          echo ""
+          echo "=== Debug APK directory ==="
+          ls -la mobile/android/app/build/outputs/apk/debug/ 2>/dev/null || echo "Debug directory not found"
+          echo ""
+          echo "=== Release APK directory ==="
+          ls -la mobile/android/app/build/outputs/apk/release/ 2>/dev/null || echo "Release directory not found"
 
       - name: Upload build logs (always)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: debug-build-logs
+          name: build-logs
           path: |
             mobile/npm-install.log
-            mobile/android/gradle-build.log
+            mobile/prebuild.log
+            mobile/android/gradle-debug.log
+            mobile/android/gradle-release.log
           retention-days: 7
 
-      - name: Upload Debug APK (if exists)
+      - name: Upload Debug APK
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -93,84 +113,7 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
 
-  build-release:
-    name: Build Release APK
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || (github.ref == 'refs/heads/main' && github.event_name == 'push')
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18
-          cache: npm
-          cache-dependency-path: mobile/package-lock.json
-
-      - name: Install npm dependencies
-        working-directory: mobile
-        run: |
-          echo "=== Starting npm ci for release ==="
-          npm ci --legacy-peer-deps 2>&1 | tee npm-install.log
-          echo "=== npm ci finished ==="
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: zulu
-          java-version: 17
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Accept Android licenses
-        run: |
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-
-      - name: Generate Signing Keystore
-        run: |
-          keytool -genkeypair \
-            -v -keystore mobile/android/app/debug.keystore \
-            -storepass android \
-            -alias androiddebugkey \
-            -keypass android \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US"
-
-      - name: Grant execute permission for Gradle
-        run: chmod +x mobile/android/gradlew
-
-      - name: Build Release APK (Signed)
-        working-directory: mobile/android
-        run: |
-          echo "=== Starting Gradle release build ==="
-          export NODE_OPTIONS="--max-old-space-size=4096"
-          ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee gradle-build.log
-          echo "=== Build exit code: $? ==="
-
-      - name: Check and list APK files
-        run: |
-          echo "=== Checking for release APK files ==="
-          find mobile/android/app/build -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
-          if [ -d "mobile/android/app/build/outputs/apk/release" ]; then
-            ls -la mobile/android/app/build/outputs/apk/release/
-          fi
-
-      - name: Upload build logs (always)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-build-logs
-          path: |
-            mobile/npm-install.log
-            mobile/android/gradle-build.log
-          retention-days: 7
-
-      - name: Upload Release APK (if exists)
+      - name: Upload Release APK
         if: always()
         uses: actions/upload-artifact@v4
         with:

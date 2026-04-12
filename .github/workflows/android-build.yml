@@ -87,6 +87,27 @@ jobs:
       - name: Grant execute permission for Gradle
         run: chmod +x mobile/android/gradlew
 
+      - name: Fix AppCompat dependency
+        working-directory: mobile/android
+        run: |
+          echo "=== Adding missing AppCompat dependency ==="
+          BUILD_FILE="app/build.gradle"
+          
+          # Check if appcompat is already in dependencies
+          if ! grep -q "appcompat" "$BUILD_FILE"; then
+            echo "Adding implementation 'androidx.appcompat:appcompat:1.6.1' to dependencies"
+            sed -i '/^dependencies {/a\\    implementation '""'androidx.appcompat:appcompat:1.6.1'""'' "$BUILD_FILE"
+          fi
+          
+          # Also add core library if missing
+          if ! grep -q "androidx.core:core" "$BUILD_FILE"; then
+            echo "Adding implementation 'androidx.core:core:1.12.0' to dependencies"
+            sed -i '/^dependencies {/a\\    implementation '""'androidx.core:core:1.12.0'""'' "$BUILD_FILE"
+          fi
+          
+          echo "=== Updated build.gradle dependencies ==="
+          grep -A 20 "^dependencies" "$BUILD_FILE"
+
       - name: Build Debug APK
         working-directory: mobile/android
         run: |

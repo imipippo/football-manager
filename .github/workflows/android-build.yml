@@ -28,7 +28,7 @@ jobs:
         run: |
           echo "=== Starting npm ci ==="
           npm ci --legacy-peer-deps 2>&1 | tee npm-install.log
-          echo "=== npm ci finished with exit code $? ==="
+          echo "=== npm ci finished ==="
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -65,8 +65,19 @@ jobs:
           echo "=== Starting Gradle debug build ==="
           export NODE_OPTIONS="--max-old-space-size=4096"
           export ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/25.2.9519653
-          ./gradlew assembleDebug --no-daemon --stacktrace --info 2>&1 | tee gradle-build.log
-          echo "=== Gradle debug build finished with exit code $? ==="
+          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee gradle-build.log
+          echo "=== Build exit code: $? ==="
+
+      - name: Check and list APK files
+        run: |
+          echo "=== Checking for debug APK files ==="
+          if [ -d "mobile/android/app/build/outputs/apk/debug" ]; then
+            ls -la mobile/android/app/build/outputs/apk/debug/
+            find mobile/android/app/build/outputs/apk/debug -name "*.apk" -type f
+          else
+            echo "Debug APK directory not found!"
+            find mobile/android/app/build -name "*.apk" -type f 2>/dev/null || echo "No APK files found anywhere"
+          fi
 
       - name: Upload build logs (always)
         if: always()
@@ -78,13 +89,14 @@ jobs:
             mobile/android/gradle-build.log
           retention-days: 7
 
-      - name: Upload Debug APK
-        if: success()
+      - name: Upload Debug APK (if exists)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: debug-apk
           path: mobile/android/app/build/outputs/apk/debug/*.apk
           retention-days: 30
+          if-no-files-found: warn
 
   build-release:
     name: Build Release APK
@@ -107,7 +119,7 @@ jobs:
         run: |
           echo "=== Starting npm ci for release ==="
           npm ci --legacy-peer-deps 2>&1 | tee npm-install.log
-          echo "=== npm ci finished with exit code $? ==="
+          echo "=== npm ci finished ==="
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -144,8 +156,19 @@ jobs:
           echo "=== Starting Gradle release build ==="
           export NODE_OPTIONS="--max-old-space-size=4096"
           export ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/25.2.9519653
-          ./gradlew assembleRelease --no-daemon --stacktrace --info 2>&1 | tee gradle-build.log
-          echo "=== Gradle release build finished with exit code $? ==="
+          ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee gradle-build.log
+          echo "=== Build exit code: $? ==="
+
+      - name: Check and list APK files
+        run: |
+          echo "=== Checking for release APK files ==="
+          if [ -d "mobile/android/app/build/outputs/apk/release" ]; then
+            ls -la mobile/android/app/build/outputs/apk/release/
+            find mobile/android/app/build/outputs/apk/release -name "*.apk" -type f
+          else
+            echo "Release APK directory not found!"
+            find mobile/android/app/build -name "*.apk" -type f 2>/dev/null || echo "No APK files found anywhere"
+          fi
 
       - name: Upload build logs (always)
         if: always()
@@ -157,10 +180,11 @@ jobs:
             mobile/android/gradle-build.log
           retention-days: 7
 
-      - name: Upload Release APK
-        if: success()
+      - name: Upload Release APK (if exists)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: release-apk
           path: mobile/android/app/build/outputs/apk/release/*.apk
           retention-days: 90
+          if-no-files-found: warn

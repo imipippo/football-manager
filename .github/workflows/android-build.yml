@@ -87,35 +87,52 @@ jobs:
       - name: Grant execute permission for Gradle
         run: chmod +x mobile/android/gradlew
 
-      - name: Fix AGP version and clean dependencies
+      - name: Fix AGP version - global search and replace
         working-directory: mobile/android
         run: |
-          echo "=== Fixing AGP version and cleaning dependencies ==="
+          echo "=== Searching for ALL AGP version references ==="
           
-          # Show current AGP version
-          echo "=== Current AGP version ==="
-          grep -n "com.android.tools.build:gradle" build.gradle || echo "NOT FOUND"
+          # Find all files containing gradle plugin version references
+          echo "--- Files with '8.5' ---"
+          grep -rn "8\.5" . --include="*.gradle*" --include="*.properties" --include="*.toml" 2>/dev/null || echo "None found"
           
-          # Upgrade AGP using multiple methods to ensure it works
-          # Method 1: Direct sed replacement for common patterns
-          sed -i 's/com.android.tools.build:gradle:[0-9.]*/com.android.tools.build:gradle:8.7.0/g' build.gradle
+          echo ""
+          echo "--- Files with 'com.android.tools.build' ---"
+          grep -rn "com.android.tools.build" . --include="*.gradle*" --include="*.properties" --include="*.toml" 2>/dev/null || echo "None found"
           
-          # Method 2: Also try replacing the version number pattern
-          sed -i 's/gradle:8\.[0-9]*/gradle:8.7.0/g' build.gradle
+          echo ""
+          echo "=== Upgrading AGP to 8.7.0 in ALL files ==="
           
-          # Method 3: Replace any remaining 8.x versions
-          sed -i 's/gradle:8\.5\.0/gradle:8.7.0/g' build.gradle
+          # Global replacement across ALL gradle/properties files
+          find . -type f \( -name "*.gradle*" -o -name "*.properties" -o -name "*.toml" \) \
+            -exec sed -i 's/com\.android\.tools\.build:gradle:[0-9.]*/com.android.tools.build:gradle:8.7.0/g' {} +
           
-          echo "=== Updated AGP version ==="
-          grep -n "com.android.tools.build:gradle" build.gradle || echo "STILL NOT FOUND"
+          find . -type f \( -name "*.gradle*" -o -name "*.properties" -o -name "*.toml" \) \
+            -exec sed -i 's/gradle:8\.[0-9]*/gradle:8.7.0/g' {} +
           
-          # Clean app/build.gradle - remove our old manual additions
-          if [ -f "app/build.gradle" ]; then
-            sed -i "/implementation 'androidx.appcompat:appcompat:1.6.1'/d" app/build.gradle
-            sed -i "/implementation 'androidx.core:core:1.12.0'/d" app/build.gradle
-            echo "=== Cleaned old dependencies ==="
-            grep -A 15 "^dependencies" app/build.gradle || echo "No dependencies found"
+          find . -type f \( -name "*.gradle*" -o -name "*.properties" -o -name "*.toml" \) \
+            -exec sed -i 's/agp = "[0-9.]*"/agp = "8.7.0"/g' {} +
+          
+          # Also check settings.gradle for pluginManagement
+          if [ -f "settings.gradle" ]; then
+            sed -i 's/id "com.android.application" version "[0-9]*"/id "com.android.application" version "8.7.0"/g' settings.gradle
+            sed -i 's/android Gradle Plugin.*$/android Gradle Plugin 8.7.0/g' settings.gradle
           fi
+          
+          echo ""
+          echo "=== Verification: checking for any remaining 8.5 ==="
+          grep -rn "8\.5" . --include="*.gradle*" --include="*.properties" --include="*.toml" 2>/dev/null && echo "WARNING: Still has 8.5!" || echo "SUCCESS: All upgraded to 8.7.0"
+          
+          echo ""
+          echo "=== Final check of key files ==="
+          echo "--- build.gradle ---"
+          grep "tools.build:gradle" build.gradle || echo "Not found in build.gradle"
+          echo ""
+          echo "--- settings.gradle (pluginManagement) ---"
+          grep -A2 "pluginManagement" settings.gradle || echo "No pluginManagement found"
+          echo ""
+          echo "--- gradle.properties ---"
+          cat gradle.properties 2>/dev/null || echo "No gradle.properties"
 
       - name: Build Debug APK
         working-directory: mobile/android

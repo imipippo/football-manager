@@ -92,78 +92,76 @@ jobs:
         run: |
           echo "=== Forcing compatible dependency versions ==="
           
-          # Strategy: Instead of upgrading AGP (which failed multiple times),
-          # we'll downgrade androidx.core to version compatible with AGP 8.5.0
-          
           # Create/update gradle.properties to force dependency versions
           cat > gradle.properties << 'PROPEOF'
           # Project-wide Gradle settings.
-          
-          # IDE (e.g. Android Studio) users:
-          # Gradle settings configured through the IDE *will override*
-          # any settings specified in this file.
-          
-          # For more details on how to configure your build environment visit
-          # http://www.gradle.org/docs/current/userguide/build_environment.html
-          
-          # Specifies the JVM arguments used for the daemon process.
-          # The setting is particularly useful for tweaking memory settings.
           org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
-          
-          # When configured, Gradle will run in incubating parallel mode.
-          # This option should only be used with decoupled projects. More details, visit
-          # http://www.gradle.org/docs/current/userguide/multi_project_builds.html#sec:decoupled_projects
-          # org.gradle.parallel=true
-          
-          # AndroidX package structure to make it clearer which packages are bundled with the
-          # Android operating system, and which are packaged with your app's APK
-          # https://developer.android.com/topic/libraries/support-library/androidx-rn
           android.useAndroidX=true
-          
-          # Kotlin code style for this project: "official" or "obsolete":
           kotlin.code.style=official
-          
-          # Enables namespacing of each library's R class so that its R class includes only the
-          # resources declared in the library itself and none from the library's dependencies,
-          # thereby reducing the size of the R class for that library
           android.nonTransitiveRClass=true
-          
-          # Force compatible versions for AGP 8.5.0
-          androidx.core.version=1.13.1
           PROPEOF
           
-          echo "=== Created gradle.properties with forced versions ==="
+          echo "=== Created gradle.properties ==="
           cat gradle.properties
           
-          # Also try to find and patch any version catalog files
           echo ""
-          echo "=== Checking for version catalog files ==="
+          echo "=== Fixing app/build.gradle ==="
+          if [ -f "app/build.gradle" ]; then
+            # 1. Remove hermesEnabled from wrong location (dependencies block)
+            sed -i '/^[[:space:]]*hermesEnabled[[:space:]]*=/d' app/build.gradle
+            
+            # 2. Add resolutionStrategy to force downgrade androidx.core
+            # This is the HIGHEST priority method in Gradle - it overrides everything
+            python3 << 'PYEOF'
+          build_file = "app/build.gradle"
+          
+          with open(build_file, 'r') as f:
+              content = f.read()
+          
+          # Add resolutionStrategy inside android block (before the closing })
+          resolution_strategy = """
+     // Force compatible versions for AGP 8.5.0
+     configurations.all {
+         resolutionStrategy {
+             force 'androidx.core:core:1.13.1'
+             force 'androidx.core:core-ktx:1.13.1'
+         }
+     }
+ """
+          
+          # Insert before the last closing brace of android block
+          # Find "}" that comes after dependencies block
+          import re
+          # Pattern: find the closing of android { ... } block (the one after dependencies)
+          # We'll insert before the last "}" at file level inside android block
+          
+          # Simpler approach: add resolutionStrategy right before dependencies block
+          if 'resolutionStrategy' not in content:
+              if 'dependencies {' in content:
+                  content = content.replace(
+                      'dependencies {',
+                      resolution_strategy + '\ndependencies {'
+                  )
+                  print("Added resolutionStrategy before dependencies")
+          
+          with open(build_file, 'w') as f:
+              f.write(content)
+          
+          print("Done fixing build.gradle")
+          PYEOF
+            
+            echo "--- Fixed app/build.gradle (showing key sections) ---"
+            grep -n "resolutionStrategy" app/build.gradle || echo "Not found!"
+            grep -n "force.*core" app/build.gradle || echo "Not found!"
+            grep -n "hermesEnabled" app/build.gradle || echo "hermesEnabled removed OK"
+          fi
+          echo ""
+          echo "=== Also patch .toml version catalog files ==="
           find . -name "*.toml" -type f 2>/dev/null | while read f; do
-            echo "--- Found: $f ---"
-            cat "$f"
-            # Replace core version in TOML files too
+            echo "Patching: $f"
             sed -i 's/core = "1\.16\.0"/core = "1.13.1"/g' "$f"
             sed -i 's/coreKtx = "1\.16\.0"/coreKtx = "1.13.1"/g' "$f"
           done
-          
-          echo ""
-          echo "=== Fixing hermesEnabled property location ==="
-          # expo prebuild sometimes puts hermesEnabled inside dependencies block
-          # It should be at project level or inside android block, not in dependencies
-          if [ -f "app/build.gradle" ]; then
-            # Remove hermesEnabled from dependencies block if it's there
-            sed -i '/^[[:space:]]*hermesEnabled[[:space:]]*=/d' app/build.gradle
-            
-            # Add hermesEnabled as project ext property at the top of the file
-            sed -i '1i\ext { hermesEnabled = true }' app/build.gradle
-            
-            echo "--- Fixed app/build.gradle ---"
-            head -5 app/build.gradle
-          fi
-          
-          echo ""
-          echo "=== Final verification ==="
-          grep -rn "1\.16\.0" . --include="*.toml" --include="*.properties" --include="*.gradle*" 2>/dev/null && echo "WARNING: Still has 1.16.0!" || echo "SUCCESS: All downgraded to 1.13.1"
 
       - name: Build Debug APK
         working-directory: mobile/android

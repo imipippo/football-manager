@@ -87,42 +87,54 @@ jobs:
       - name: Grant execute permission for Gradle
         run: chmod +x mobile/android/gradlew
 
-      - name: Fix AppCompat dependency
+      - name: Fix AGP version and clean dependencies
         working-directory: mobile/android
         run: |
-          echo "=== Adding missing AppCompat dependency using Python ==="
+          echo "=== Fixing AGP version and cleaning dependencies ==="
           python3 << 'EOF'
           import re
           
-          build_file = "app/build.gradle"
-          
+          # Fix build.gradle (project level) - upgrade AGP
+          build_file = "build.gradle"
           with open(build_file, 'r') as f:
               content = f.read()
           
-          # Dependencies to add
-          deps_to_add = [
-              "    implementation 'androidx.appcompat:appcompat:1.6.1'",
-              "    implementation 'androidx.core:core:1.12.0'"
-          ]
-          
-          # Find the dependencies block and add missing dependencies
-          for dep in deps_to_add:
-              if dep.split("'")[1] not in content:  # Check if dependency already exists
-                  # Find the dependencies { line and insert after it
-                  pattern = r'(dependencies \{)'
-                  match = re.search(pattern, content)
-                  if match:
-                      insert_pos = match.end()
-                      content = content[:insert_pos] + '\n' + dep + content[insert_pos:]
-                      print(f"Added: {dep}")
+          # Upgrade AGP to 8.7.0 to support androidx.core:1.16.0
+          content = re.sub(
+              r"classpath\('com\.android\.tools\.build:gradle:[^']+'\)",
+              "classpath('com.android.tools.build:gradle:8.7.0')",
+              content
+          )
           
           with open(build_file, 'w') as f:
               f.write(content)
+          print("Upgraded AGP to 8.7.0")
           
-          print("=== Updated build.gradle ===")
+          # Fix app/build.gradle - remove duplicate/old dependencies we added
+          app_build = "app/build.gradle"
+          with open(app_build, 'r') as f:
+              content = f.read()
+          
+          # Remove old manual additions that conflict with expo prebuild's deps
+          old_deps = [
+              "    implementation 'androidx.appcompat:appcompat:1.6.1'",
+              "    implementation 'androidx.core:core:1.12.0'"
+          ]
+          for dep in old_deps:
+              content = content.replace(dep + '\n', '')
+              print(f"Removed: {dep}")
+          
+          with open(app_build, 'w') as f:
+              f.write(content)
+          
+          print("=== Done fixing ===")
           EOF
           
-          cat app/build.gradle | grep -A 15 "^dependencies"
+          echo "=== AGP Version ==="
+          grep "com.android.tools.build:gradle" build.gradle
+          echo ""
+          echo "=== App Dependencies ==="
+          grep -A 20 "^dependencies" app/build.gradle
 
       - name: Build Debug APK
         working-directory: mobile/android

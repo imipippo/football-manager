@@ -98,27 +98,33 @@ jobs:
               f.write(content)
           print("Removed hermesEnabled from app/build.gradle")
           
-          # Fix 2: Add resolutionStrategy to ROOT build.gradle (not app/build.gradle)
-          # This avoids breaking the complex app/build.gradle structure
+          # Fix 2: Add resolutionStrategy inside subprojects block in ROOT build.gradle
           root_build = "mobile/android/build.gradle"
           with open(root_build, 'r') as f:
               content = f.read()
           
           resolution_strategy = """
-          // Force compatible dependency versions for AGP 8.5.0
-          configurations.all {
-              resolutionStrategy {
-                  force 'androidx.core:core:1.13.1'
-                  force 'androidx.core:core-ktx:1.13.1'
+              // Force compatible dependency versions for AGP 8.5.0
+              configurations.all {
+                  resolutionStrategy {
+                      force 'androidx.core:core:1.13.1'
+                      force 'androidx.core:core-ktx:1.13.1'
+                  }
               }
-          }
           """
           
           if 'resolutionStrategy' not in content:
-              # Insert after the last top-level closing brace of allprojects/subprojects block
-              # Safe approach: just append at end of file
-              content = content.rstrip() + '\n' + resolution_strategy + '\n'
-              print("Added resolutionStrategy to root build.gradle")
+              if 'subprojects {' in content:
+                  # Insert at the start of subprojects block
+                  content = content.replace(
+                      'subprojects {',
+                      'subprojects {' + resolution_strategy
+                  )
+                  print("Added resolutionStrategy inside subprojects {}")
+              else:
+                  # No subprojects block, create one
+                  content = content.rstrip() + '\n\nsubprojects {\n' + resolution_strategy + '\n}\n'
+                  print("Created new subprojects {} with resolutionStrategy")
           
           with open(root_build, 'w') as f:
               f.write(content)

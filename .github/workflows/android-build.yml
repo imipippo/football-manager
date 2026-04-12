@@ -91,50 +91,31 @@ jobs:
         working-directory: mobile/android
         run: |
           echo "=== Fixing AGP version and cleaning dependencies ==="
-          python3 << 'EOF'
-          import re
           
-          # Fix build.gradle (project level) - upgrade AGP
-          build_file = "build.gradle"
-          with open(build_file, 'r') as f:
-              content = f.read()
+          # Show current AGP version
+          echo "=== Current AGP version ==="
+          grep -n "com.android.tools.build:gradle" build.gradle || echo "NOT FOUND"
           
-          # Upgrade AGP to 8.7.0 to support androidx.core:1.16.0
-          content = re.sub(
-              r"classpath\('com\.android\.tools\.build:gradle:[^']+'\)",
-              "classpath('com.android.tools.build:gradle:8.7.0')",
-              content
-          )
+          # Upgrade AGP using multiple methods to ensure it works
+          # Method 1: Direct sed replacement for common patterns
+          sed -i 's/com.android.tools.build:gradle:[0-9.]*/com.android.tools.build:gradle:8.7.0/g' build.gradle
           
-          with open(build_file, 'w') as f:
-              f.write(content)
-          print("Upgraded AGP to 8.7.0")
+          # Method 2: Also try replacing the version number pattern
+          sed -i 's/gradle:8\.[0-9]*/gradle:8.7.0/g' build.gradle
           
-          # Fix app/build.gradle - remove duplicate/old dependencies we added
-          app_build = "app/build.gradle"
-          with open(app_build, 'r') as f:
-              content = f.read()
+          # Method 3: Replace any remaining 8.x versions
+          sed -i 's/gradle:8\.5\.0/gradle:8.7.0/g' build.gradle
           
-          # Remove old manual additions that conflict with expo prebuild's deps
-          old_deps = [
-              "    implementation 'androidx.appcompat:appcompat:1.6.1'",
-              "    implementation 'androidx.core:core:1.12.0'"
-          ]
-          for dep in old_deps:
-              content = content.replace(dep + '\n', '')
-              print(f"Removed: {dep}")
+          echo "=== Updated AGP version ==="
+          grep -n "com.android.tools.build:gradle" build.gradle || echo "STILL NOT FOUND"
           
-          with open(app_build, 'w') as f:
-              f.write(content)
-          
-          print("=== Done fixing ===")
-          EOF
-          
-          echo "=== AGP Version ==="
-          grep "com.android.tools.build:gradle" build.gradle
-          echo ""
-          echo "=== App Dependencies ==="
-          grep -A 20 "^dependencies" app/build.gradle
+          # Clean app/build.gradle - remove our old manual additions
+          if [ -f "app/build.gradle" ]; then
+            sed -i "/implementation 'androidx.appcompat:appcompat:1.6.1'/d" app/build.gradle
+            sed -i "/implementation 'androidx.core:core:1.12.0'/d" app/build.gradle
+            echo "=== Cleaned old dependencies ==="
+            grep -A 15 "^dependencies" app/build.gradle || echo "No dependencies found"
+          fi
 
       - name: Build Debug APK
         working-directory: mobile/android

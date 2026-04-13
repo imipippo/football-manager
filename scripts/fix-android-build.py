@@ -2,7 +2,7 @@ import os
 import re
 
 print("=== Starting Android build fix script ===")
-print("Strategy: Safe bracket-aware block replacement")
+print("Strategy: Complete settings.gradle rewrite with verified template")
 
 TARGET_AGP = "8.7.0"
 TARGET_KOTLIN = "1.9.22"
@@ -17,51 +17,6 @@ def write_file(path, content):
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
 
-def find_matching_brace(text, start_pos):
-    """Find the position of the closing brace that matches the opening brace at start_pos"""
-    if start_pos >= len(text) or text[start_pos] != '{':
-        return -1
-    depth = 0
-    in_string = False
-    string_char = None
-    i = start_pos
-    while i < len(text):
-        char = text[i]
-        
-        if in_string:
-            if char == '\\' and i + 1 < len(text):
-                i += 2
-                continue
-            if char == string_char:
-                in_string = False
-        else:
-            if char in ('"', "'"):
-                in_string = True
-                string_char = char
-            elif char == '{':
-                depth += 1
-            elif char == '}':
-                depth -= 1
-                if depth == 0:
-                    return i
-        i += 1
-    return -1
-
-def find_block(text, keyword):
-    """Find a top-level {block} starting with keyword (e.g., 'pluginManagement', 'plugins')"""
-    pattern = re.compile(rf'\b{keyword}\s*\{{')
-    match = pattern.search(text)
-    if not match:
-        return -1, -1
-    
-    start = match.start()
-    brace_start = match.end() - 1
-    end = find_matching_brace(text, brace_start)
-    
-    if end == -1:
-        return -1, -1
-    return start, end + 1
-
 print("\n[Step 1] Fix hermesEnabled in app/build.gradle")
 app_build = "mobile/android/app/build.gradle"
 if os.path.exists(app_build):
@@ -71,46 +26,50 @@ if os.path.exists(app_build):
     write_file(app_build, "\n".join(filtered))
     print("  ✓ Removed hermesEnabled from wrong location")
 
-print("\n[Step 2] Safely update settings.gradle")
+print("\n[Step 2] Extract info and rebuild settings.gradle")
 settings_path = "mobile/android/settings.gradle"
-if os.path.exists(settings_path):
-    content = read_file(settings_path)
-    
-    new_plugin_mgmt = """pluginManagement {
-    repositories {
+original_settings = read_file(settings_path) or ""
+
+project_name_match = re.search(r'rootProject\.name\s*=\s*["\']([^"\']+)["\']', original_settings)
+root_project_name = project_name_match.group(1) if project_name_match else "football-manager"
+
+includes = re.findall(r'^\s*include\s*[\'"]([^\'"]+)[\'"]', original_settings, re.MULTILINE)
+if not includes:
+    includes = [":app"]
+
+print(f"  Project name: {root_project_name}")
+print(f"  Includes: {includes}")
+
+new_settings = f"""pluginManagement {{
+    repositories {{
         google()
         mavenCentral()
         gradlePluginPortal()
-    }
-}"""
+    }}
+}}
 
-    new_plugins = """plugins {{
-    id("com.android.application") version "{}" apply false
-    id("com.android.library") version "{}" apply false
-    id("org.jetbrains.kotlin.android") version "{}" apply false
-}}""".format(TARGET_AGP, TARGET_AGP, TARGET_KOTLIN)
-    
-    pm_start, pm_end = find_block(content, "pluginManagement")
-    
-    if pm_start >= 0:
-        content = content[:pm_start] + new_plugin_mgmt + content[pm_end:]
-        print("  ✓ Replaced pluginManagement block (bracket-safe)")
-    else:
-        content = new_plugin_mgmt + "\n" + content
-        print("  ✓ Added pluginManagement block")
-    
-    pl_start, pl_end = find_block(content, "plugins")
-    
-    if pl_start >= 0:
-        content = content[:pl_start] + new_plugins + content[pl_end:]
-        print(f"  ✓ Replaced plugins block with AGP {TARGET_AGP}")
-    else:
-        content = content.rstrip() + "\n\n" + new_plugins + "\n"
-        print(f"  ✓ Added plugins block with AGP {TARGET_AGP}")
-    
-    write_file(settings_path, content)
-else:
-    print(f"  ✗ {settings_path} not found!")
+plugins {{
+    id("com.android.application") version "{TARGET_AGP}" apply false
+    id("com.android.library") version "{TARGET_AGP}" apply false
+    id("org.jetbrains.kotlin.android") version "{TARGET_KOTLIN}" apply false
+}}
+
+dependencyResolutionManagement {{
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {{
+        google()
+        mavenCentral()
+    }}
+}}
+
+rootProject.name = "{root_project_name}"
+"""
+
+for inc in includes:
+    new_settings += f'include "{inc}"\n'
+
+write_file(settings_path, new_settings)
+print("  ✓ Rebuilt settings.gradle with standard template")
 
 print("\n[Step 3] Override .toml files")
 toml_paths = []
@@ -144,7 +103,7 @@ for toml_path in toml_paths:
     
     if content != orig:
         write_file(toml_path, content)
-        print(f"  ✓ Updated {toml_path}")
+        print(f"  ✓ Updated {os.path.basename(toml_path)}")
 
 print("\n[Step 4] Update root build.gradle classpath")
 root_build = "mobile/android/build.gradle"
@@ -175,31 +134,18 @@ write_file(props_path, props_content)
 print("  ✓ Ensured AndroidX properties")
 
 print("\n=== Verification ===")
-settings = read_file(settings_path) or ""
-if TARGET_AGP in settings:
-    print(f"✓ settings.gradle contains AGP {TARGET_AGP}")
+final_settings = read_file(settings_path) or ""
+print("--- Final settings.gradle ---")
+for i, line in enumerate(final_settings.split("\n")[:20], 1):
+    print(f"  {i:2d}: {line}")
+print("...")
 
-pm_check_start, pm_check_end = find_block(settings, "pluginManagement")
-if pm_check_start >= 0:
-    pm_block = settings[pm_check_start:pm_check_end]
-    if "google()" in pm_block and "mavenCentral()" in pm_block:
-        print("✓ pluginManagement block is valid")
-    else:
-        print("⚠ pluginManagement block may be malformed!")
-
-pl_check_start, pl_check_end = find_block(settings, "plugins")
-if pl_check_start >= 0:
-    pl_block = settings[pl_check_start:pl_check_end]
-    if TARGET_AGP in pl_block:
-        print(f"✓ plugins block contains correct AGP version")
-    else:
-        print("⚠ plugins block missing correct AGP version!")
+if TARGET_AGP in final_settings:
+    print(f"✓ AGP {TARGET_AGP} present in settings.gradle")
 else:
-    print("⚠ No plugins block found!")
+    print(f"✗ WARNING: AGP {TARGET_AGP} NOT found!")
 
-for toml_path in toml_paths:
-    toml_content = read_file(toml_path) or ""
-    if TARGET_AGP in toml_content:
-        print(f"✓ {os.path.basename(toml_path)} updated")
+if 'pluginManagement {' in final_settings and 'plugins {' in final_settings:
+    print("✓ Required blocks present")
 
 print("\n=== Fix script completed ===")

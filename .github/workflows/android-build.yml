@@ -89,9 +89,18 @@ jobs:
         working-directory: mobile/android
         run: |
           echo "=== Cleaning Gradle build cache ==="
-          ./gradlew clean --no-daemon 2>&1 | tail -5
+          ./gradlew clean --no-daemon 2>&1 | tail -5 || true
+          ./gradlew cleanBuildCache --no-daemon 2>&1 | tail -5 || true
           rm -rf .gradle build app/build
-          echo "✓ Build cache cleaned"
+          echo "✓ Gradle cache cleaned"
+          
+      - name: Clean node_modules and reinstall
+        working-directory: mobile
+        run: |
+          echo "=== Cleaning node_modules ==="
+          rm -rf node_modules package-lock.json 2>/dev/null || true
+          npm install --legacy-peer-deps 2>&1 | tail -10
+          echo "✓ Dependencies reinstalled"
 
       - name: Configure Gradle memory
         run: |
@@ -99,21 +108,16 @@ jobs:
           echo "org.gradle.jvmargs=-Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8" >> mobile/android/gradle.properties
           echo "org.gradle.daemon=false" >> mobile/android/gradle.properties
           echo "org.gradle.parallel=true" >> mobile/android/gradle.properties
-          echo "android.suppressUnsupportedCompileSdk=35" >> mobile/android/gradle.properties
-          echo "android.composeCompiler.suppressKotlinVersionCompatibilityCheck=true" >> mobile/android/gradle.properties
-          cat mobile/android/gradle.properties | grep -E "jvmargs|daemon|parallel|suppress"
+          cat mobile/android/gradle.properties | grep -E "jvmargs|daemon|parallel"
           echo "=== Memory configuration done ==="
 
       - name: Verify AGP upgrade
         run: |
-          echo "=== Checking AGP version in all files ==="
-          grep -rn "8\.[5-7]\." mobile/android/ --include="*.gradle*" --include="*.toml" --include="*.properties" 2>/dev/null || echo "No version refs found"
+          echo "=== Checking configuration ==="
+          grep -rn "1\.9\.20\|8\.6\.0" mobile/android/ --include="*.gradle*" 2>/dev/null | head -5 || echo "No version refs found"
           echo ""
-          echo "=== Checking for any remaining resolutionStrategy force ==="
-          grep -rn "force.*core.*1\.13" mobile/android/ --include="*.gradle*" 2>/dev/null && echo "WARNING: Old force found!" || echo "Clean"
-          echo ""
-          echo "=== settings.gradle pluginManagement ==="
-          head -15 mobile/android/settings.gradle 2>/dev/null || echo "No settings.gradle"
+          echo "=== Kotlin compatibility block ==="
+          grep -A3 "jvmToolchain(17)" mobile/android/build.gradle 2>/dev/null || echo "Not found"
 
       - name: Build Debug APK
         working-directory: mobile/android
@@ -128,7 +132,7 @@ jobs:
         working-directory: mobile/android
         run: |
           echo "=== Starting Gradle release build ==="
-          export NODE_OPTIONS="--max-old-space-size-size=4096"
+          export NODE_OPTIONS="--max-old-space-size=4096"
           export GRADLE_OPTS="-Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8"
           ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee gradle-release.log
           echo "=== Release build exit code: $? ==="

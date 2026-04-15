@@ -2,10 +2,10 @@ import os
 import re
 
 print("=== Starting Android build fix script ===")
-print("Strategy: Fix version compatibility issues")
+print("Strategy: Complete compatibility fix")
 
 TARGET_AGP = "8.6.0"
-TARGET_KOTLIN = "1.9.25"
+TARGET_KOTLIN = "1.9.20"
 TARGET_RN_GRADLE_PLUGIN = "0.75.4"
 
 def read_file(path):
@@ -27,11 +27,10 @@ if os.path.exists(app_build):
     write_file(app_build, "\n".join(filtered))
     print("  ✓ Removed hermesEnabled from wrong location")
 
-print("\n[Step 2] Fix build.gradle classpath versions")
+print("\n[Step 2] Fix build.gradle classpath + ext versions")
 root_build = "mobile/android/build.gradle"
 if os.path.exists(root_build):
     content = read_file(root_build)
-    orig = content
     
     content = re.sub(
         r'com\.android\.tools\.build:gradle:[^"]*"',
@@ -51,22 +50,54 @@ if os.path.exists(root_build):
         content,
     )
     
-    kotlin_version_match = re.search(r'kotlin_version\s*=\s*"[^"]*"', content)
-    if kotlin_version_match:
-        content = re.sub(
-            r'kotlin_version\s*=\s*"[^"]*"',
-            f'kotlin_version = "{TARGET_KOTLIN}"',
-            content,
-        )
+    kotlin_version_patterns = [
+        (r'kotlin_version\s*=\s*"[^"]*"', f'kotlin_version = "{TARGET_KOTLIN}"'),
+        (r'kotlinVersion\s*=\s*"[^"]*"', f'kotlinVersion = "{TARGET_KOTLIN}"'),
+        (r'KOTLIN_VERSION\s*=\s*"[^"]*"', f'KOTLIN_VERSION = "{TARGET_KOTLIN}"'),
+    ]
+    for pattern, replacement in kotlin_version_patterns:
+        if re.search(pattern, content):
+            content = re.sub(pattern, replacement, content)
+            print(f"  ✓ Updated Kotlin version to {TARGET_KOTLIN}")
+            break
     
-    if content != orig:
-        write_file(root_build, content)
-        print(f"  ✓ Updated build.gradle:")
-        print(f"    - AGP: {TARGET_AGP}")
-        print(f"    - Kotlin: {TARGET_KOTLIN}")
-        print(f"    - RN Gradle Plugin: {TARGET_RN_GRADLE_PLUGIN}")
+    write_file(root_build, content)
+    print(f"  ✓ AGP: {TARGET_AGP}, Kotlin: {TARGET_KOTLIN}")
 
-print("\n[Step 3] Configure gradle.properties for compatibility")
+print("\n[Step 3] Add subprojects Kotlin compatibility block")
+subprojects_block = """
+
+subprojects {
+    afterEvaluate {
+        if (project.plugins.hasPlugin("kotlin-android")) {
+            kotlin {
+                jvmToolchain(17)
+            }
+            tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+                kotlinOptions {
+                    jvmTarget = "17"
+                    freeCompilerArgs += [
+                        "-Xsuppress-version-warnings",
+                        "-Xskip-prerelease-check",
+                        "-Xjsr305=strict"
+                    ]
+                }
+            }
+        }
+    }
+}
+"""
+
+if os.path.exists(root_build):
+    content = read_file(root_build)
+    if "jvmToolchain(17)" not in content:
+        content = content.rstrip() + subprojects_block
+        write_file(root_build, content)
+        print("  ✓ Added Kotlin compatibility block")
+    else:
+        print("  ℹ Kotlin compatibility block already exists")
+
+print("\n[Step 4] Configure gradle.properties")
 props_path = "mobile/android/gradle.properties"
 props_content = read_file(props_path) or ""
 
@@ -76,32 +107,23 @@ props_to_add = {
     "org.gradle.parallel": "true",
     "android.useAndroidX": "true",
     "android.enableJetifier": "true",
-    "android.suppressUnsupportedCompileSdk": "35",
-    "android.composeCompiler.suppressKotlinVersionCompatibilityCheck": "true",
 }
 
 for key, value in props_to_add.items():
     pattern = rf'^{re.escape(key)}=.*$'
     if not re.search(pattern, props_content, re.MULTILINE):
         props_content += f"\n{key}={value}"
-        print(f"  ✓ Added {key}")
-    else:
-        props_content = re.sub(pattern, f"{key}={value}", props_content, flags=re.MULTILINE)
 
 write_file(props_path, props_content)
 print("  ✓ gradle.properties configured")
 
 print("\n=== Verification ===")
 root_content = read_file(root_build) or ""
-if TARGET_AGP in root_content:
-    print(f"✓ AGP {TARGET_AGP} in build.gradle")
 if TARGET_KOTLIN in root_content:
-    print(f"✓ Kotlin {TARGET_KOTLIN} in build.gradle")
-
-props_final = read_file(props_path) or ""
-if "suppressKotlinVersionCompatibilityCheck=true" in props_final:
-    print("✓ Kotlin compatibility check suppressed")
-if "4608m" in props_final:
-    print("✓ Memory increased to 4608m")
+    print(f"✓ Kotlin {TARGET_KOTLIN} configured")
+if TARGET_AGP in root_content:
+    print(f"✓ AGP {TARGET_AGP} configured")
+if "jvmToolchain(17)" in root_content:
+    print("✓ Kotlin compatibility block added")
 
 print("\n=== Fix script completed ===")

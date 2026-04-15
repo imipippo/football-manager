@@ -85,6 +85,14 @@ jobs:
       - name: Run Android build fix script
         run: python3 scripts/fix-android-build.py
 
+      - name: Clean Android build cache
+        working-directory: mobile/android
+        run: |
+          echo "=== Cleaning Gradle build cache ==="
+          ./gradlew clean --no-daemon 2>&1 | tail -5
+          rm -rf .gradle build app/build
+          echo "✓ Build cache cleaned"
+
       - name: Configure Gradle memory
         run: |
           echo "=== Configuring Gradle JVM memory ==="
@@ -120,7 +128,7 @@ jobs:
         working-directory: mobile/android
         run: |
           echo "=== Starting Gradle release build ==="
-          export NODE_OPTIONS="--max-old-space-size=4096"
+          export NODE_OPTIONS="--max-old-space-size-size=4096"
           export GRADLE_OPTS="-Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8"
           ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee gradle-release.log
           echo "=== Release build exit code: $? ==="

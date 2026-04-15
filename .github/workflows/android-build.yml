@@ -102,16 +102,21 @@ jobs:
           npm install --legacy-peer-deps 2>&1 | tail -10
           echo "✓ Dependencies reinstalled"
 
-      - name: Configure Gradle memory
+      - name: Verify gradle.properties format
         run: |
-          echo "=== Configuring Gradle JVM memory ==="
-          echo "org.gradle.jvmargs=-Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8" >> mobile/android/gradle.properties
-          echo "org.gradle.daemon=false" >> mobile/android/gradle.properties
-          echo "org.gradle.parallel=true" >> mobile/android/gradle.properties
-          cat mobile/android/gradle.properties | grep -E "jvmargs|daemon|parallel"
-          echo "=== Memory configuration done ==="
+          echo "=== Verifying gradle.properties ==="
+          cat mobile/android/gradle.properties
+          echo ""
+          echo "=== Checking for malformed lines ==="
+          grep -n "=" mobile/android/gradle.properties | while read line; do
+            key=$(echo "$line" | cut -d= -f1)
+            if echo "$key" | grep -q "[^a-zA-Z0-9._-]"; then
+              echo "⚠ WARNING: Possible malformed key in: $line"
+            fi
+          done
+          echo "✓ Verification done"
 
-      - name: Verify AGP upgrade
+      - name: Verify configuration
         run: |
           echo "=== Checking configuration ==="
           grep -rn "1\.9\.20\|8\.6\.0" mobile/android/ --include="*.gradle*" 2>/dev/null | head -5 || echo "No version refs found"

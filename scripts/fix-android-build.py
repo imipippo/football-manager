@@ -97,25 +97,19 @@ if os.path.exists(root_build):
     else:
         print("  ℹ Kotlin compatibility block already exists")
 
-print("\n[Step 4] Configure gradle.properties")
+print("\n[Step 4] Configure gradle.properties (clean overwrite)")
 props_path = "mobile/android/gradle.properties"
-props_content = read_file(props_path) or ""
 
-props_to_add = {
-    "org.gradle.jvmargs": "-Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8",
-    "org.gradle.daemon": "false",
-    "org.gradle.parallel": "true",
-    "android.useAndroidX": "true",
-    "android.enableJetifier": "true",
-}
+final_props = """android.useAndroidX=true
+android.enableJetifier=true
+org.gradle.jvmargs=-Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8
+org.gradle.daemon=false
+org.gradle.parallel=true
+org.gradle.caching=true
+"""
 
-for key, value in props_to_add.items():
-    pattern = rf'^{re.escape(key)}=.*$'
-    if not re.search(pattern, props_content, re.MULTILINE):
-        props_content += f"\n{key}={value}"
-
-write_file(props_path, props_content)
-print("  ✓ gradle.properties configured")
+write_file(props_path, final_props.strip() + "\n")
+print("  ✓ gradle.properties written (clean format)")
 
 print("\n=== Verification ===")
 root_content = read_file(root_build) or ""
@@ -125,5 +119,9 @@ if TARGET_AGP in root_content:
     print(f"✓ AGP {TARGET_AGP} configured")
 if "jvmToolchain(17)" in root_content:
     print("✓ Kotlin compatibility block added")
+
+props_final = read_file(props_path) or ""
+if "android.enableJetifier=true" in props_final and "org.gradle.jvmargs=" in props_final:
+    print("✓ gradle.properties format OK")
 
 print("\n=== Fix script completed ===")

@@ -36,6 +36,7 @@ clean_build_gradle = '''buildscript {
         compileSdkVersion = 34
         targetSdkVersion = 34
         kotlinVersion = "1.9.20"
+        ndkVersion = "25.1.8937393"
         hermesEnabled = true
         newArchEnabled = false
     }
@@ -44,13 +45,9 @@ clean_build_gradle = '''buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.3.0'
+        classpath 'com.android.tools.build:gradle:8.2.2'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion"
     }
-}
-
-plugins {
-    id "com.facebook.react.rootproject" version "0.75.0"
 }
 
 allprojects {
@@ -99,10 +96,12 @@ print("  ✓ gradle.properties written")
 
 print("\n=== Verification ===")
 root_content = read_file(root_build) or ""
+if 'ndkVersion = "25.1.8937393"' in root_content:
+    print("✓ ndkVersion = \"25.1.8937393\" - DEFINED!")
 if "kotlinVersion = \"1.9.20\"" in root_content:
     print("✓ kotlinVersion = \"1.9.20\" - CLEAN!")
-if "classpath 'com.android.tools.build:gradle:8.3.0'" in root_content:
-    print("✓ AGP 8.3.0 - CLEAN!")
+if "classpath 'com.android.tools.build:gradle:8.2.2'" in root_content:
+    print("✓ AGP 8.2.2 - CLEAN!")
 if "details.useVersion \"1.9.20\"" in root_content:
     print("✓ eachDependency force - CLEAN!")
 if '"""' not in root_content and "+ TARGET_KOTLIN" not in root_content:

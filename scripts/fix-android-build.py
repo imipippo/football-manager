@@ -1,7 +1,7 @@
 import os
 
 print("=== Starting Android build fix script ===")
-print("Strategy: Pure standard Expo native config (NO React Native plugin conflicts)")
+print("Strategy: Pure buildscript config (NO plugins DSL, NO RN plugin)")
 
 def read_file(path):
     if os.path.exists(path):
@@ -26,7 +26,7 @@ if os.path.exists(app_build):
     
     write_file(app_build, content)
 
-print("\n[Step 2] Write clean build.gradle (Pure Expo Standard Config)")
+print("\n[Step 2] Write clean build.gradle (Pure buildscript - NO plugins DSL)")
 root_build = "mobile/android/build.gradle"
 
 clean_build_gradle = '''buildscript {
@@ -50,12 +50,6 @@ clean_build_gradle = '''buildscript {
     }
 }
 
-plugins {
-    id 'com.android.application' version '8.2.2' apply false
-    id 'com.android.library' version '8.2.2' apply false
-    id 'org.jetbrains.kotlin.android' version '1.9.0' apply false
-}
-
 allprojects {
     repositories {
         mavenLocal()
@@ -75,7 +69,7 @@ task clean(type: Delete) {
 '''
 
 write_file(root_build, clean_build_gradle)
-print("  ✓ build.gradle written (Pure Expo Standard Config)")
+print("  ✓ build.gradle written (Pure buildscript - no plugins DSL)")
 
 print("\n[Step 3] Configure gradle.properties (clean overwrite)")
 props_path = "mobile/android/gradle.properties"
@@ -100,12 +94,10 @@ if "kotlinVersion = \"1.9.0\"" in root_content:
     print("✓ kotlinVersion = \"1.9.0\" - Standard Expo version!")
 if "classpath 'com.android.tools.build:gradle:8.2.2'" in root_content:
     print("✓ AGP 8.2.2 - CLEAN!")
-if "id 'com.android.application'" in root_content:
-    print("✓ Standard plugins block - CLEAN!")
-if "id 'org.jetbrains.kotlin.android'" in root_content:
-    print("✓ Kotlin plugin in plugins block - CLEAN!")
+if 'plugins {' not in root_content:
+    print("✓ No plugins DSL block - COMPATIBLE!")
 if 'com.facebook.react' not in root_content:
-    print("✓ No React Native plugin conflict - PURE EXPO!")
+    print("✓ No React Native plugin - PURE EXPO!")
 if '"""' not in root_content and "+ TARGET_KOTLIN" not in root_content:
     print("✓ No garbage strings - FILE IS CLEAN!")
 

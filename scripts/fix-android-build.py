@@ -1,7 +1,7 @@
 import os
 
 print("=== Starting Android build fix script ===")
-print("Strategy: Hardcoded clean template (NO variables, NO string concat)")
+print("Strategy: Pure standard Expo native config (NO React Native plugin conflicts)")
 
 def read_file(path):
     if os.path.exists(path):
@@ -26,7 +26,7 @@ if os.path.exists(app_build):
     
     write_file(app_build, content)
 
-print("\n[Step 2] Write clean build.gradle (HARDCODED - no variables)")
+print("\n[Step 2] Write clean build.gradle (Pure Expo Standard Config)")
 root_build = "mobile/android/build.gradle"
 
 clean_build_gradle = '''buildscript {
@@ -35,8 +35,8 @@ clean_build_gradle = '''buildscript {
         minSdkVersion = 21
         compileSdkVersion = 34
         targetSdkVersion = 34
-        kotlinVersion = "1.9.20"
         ndkVersion = "25.1.8937393"
+        kotlinVersion = "1.9.0"
         hermesEnabled = true
         newArchEnabled = false
     }
@@ -50,24 +50,22 @@ clean_build_gradle = '''buildscript {
     }
 }
 
+plugins {
+    id 'com.android.application' version '8.2.2' apply false
+    id 'com.android.library' version '8.2.2' apply false
+    id 'org.jetbrains.kotlin.android' version '1.9.0' apply false
+}
+
 allprojects {
     repositories {
         mavenLocal()
-        maven { url("$rootDir/../node_modules/react-native/android") }
-        maven { url("$rootDir/../node_modules/jsc-android/dist") }
+        maven {
+          url new File(['node', '--print', "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim(), '../android')
+        }
+        maven { url "$rootDir/../node_modules/jsc-android/dist" }
         google()
         mavenCentral()
         jcenter()
-    }
-}
-
-subprojects {
-    project.configurations.all {
-        resolutionStrategy.eachDependency { details ->
-            if (details.requested.group == 'org.jetbrains.kotlin' && !details.requested.name.contains('gradle')) {
-                details.useVersion "1.9.20"
-            }
-        }
     }
 }
 
@@ -77,7 +75,7 @@ task clean(type: Delete) {
 '''
 
 write_file(root_build, clean_build_gradle)
-print("  ✓ build.gradle written (100% hardcoded clean template)")
+print("  ✓ build.gradle written (Pure Expo Standard Config)")
 
 print("\n[Step 3] Configure gradle.properties (clean overwrite)")
 props_path = "mobile/android/gradle.properties"
@@ -97,13 +95,17 @@ print("  ✓ gradle.properties written")
 print("\n=== Verification ===")
 root_content = read_file(root_build) or ""
 if 'ndkVersion = "25.1.8937393"' in root_content:
-    print("✓ ndkVersion = \"25.1.8937393\" - DEFINED!")
-if "kotlinVersion = \"1.9.20\"" in root_content:
-    print("✓ kotlinVersion = \"1.9.20\" - CLEAN!")
+    print("✓ ndkVersion defined!")
+if "kotlinVersion = \"1.9.0\"" in root_content:
+    print("✓ kotlinVersion = \"1.9.0\" - Standard Expo version!")
 if "classpath 'com.android.tools.build:gradle:8.2.2'" in root_content:
     print("✓ AGP 8.2.2 - CLEAN!")
-if "details.useVersion \"1.9.20\"" in root_content:
-    print("✓ eachDependency force - CLEAN!")
+if "id 'com.android.application'" in root_content:
+    print("✓ Standard plugins block - CLEAN!")
+if "id 'org.jetbrains.kotlin.android'" in root_content:
+    print("✓ Kotlin plugin in plugins block - CLEAN!")
+if 'com.facebook.react' not in root_content:
+    print("✓ No React Native plugin conflict - PURE EXPO!")
 if '"""' not in root_content and "+ TARGET_KOTLIN" not in root_content:
     print("✓ No garbage strings - FILE IS CLEAN!")
 

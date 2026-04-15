@@ -85,6 +85,15 @@ jobs:
       - name: Run Android build fix script
         run: python3 scripts/fix-android-build.py
 
+      - name: Configure Gradle memory
+        run: |
+          echo "=== Configuring Gradle JVM memory ==="
+          echo "org.gradle.jvmargs=-Xmx4096m -XX:+HeapDumpOnOutOfMemoryError -XX:MaxMetaspaceSize=512m" >> mobile/android/gradle.properties
+          echo "org.gradle.daemon=false" >> mobile/android/gradle.properties
+          echo "org.gradle.parallel=true" >> mobile/android/gradle.properties
+          cat mobile/android/gradle.properties | grep -E "jvmargs|daemon|parallel"
+          echo "=== Memory configuration done ==="
+
       - name: Verify AGP upgrade
         run: |
           echo "=== Checking AGP version in all files ==="
@@ -101,6 +110,7 @@ jobs:
         run: |
           echo "=== Starting Gradle debug build ==="
           export NODE_OPTIONS="--max-old-space-size=4096"
+          export GRADLE_OPTS="-Xmx4096m -XX:+HeapDumpOnOutOfMemoryError"
           ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee gradle-debug.log
           echo "=== Debug build exit code: $? ==="
 
@@ -109,6 +119,7 @@ jobs:
         run: |
           echo "=== Starting Gradle release build ==="
           export NODE_OPTIONS="--max-old-space-size=4096"
+          export GRADLE_OPTS="-Xmx4096m -XX:+HeapDumpOnOutOfMemoryError"
           ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee gradle-release.log
           echo "=== Release build exit code: $? ==="
 

@@ -1,11 +1,7 @@
 import os
 
 print("=== Starting Android build fix script ===")
-print("Strategy: Clean build.gradle replacement (no more hacks)")
-
-TARGET_AGP = "8.3.0"
-TARGET_KOTLIN = "1.9.20"
-TARGET_RN_GRADLE_PLUGIN = "0.75.0"
+print("Strategy: Hardcoded clean template (NO variables, NO string concat)")
 
 def read_file(path):
     if os.path.exists(path):
@@ -30,16 +26,16 @@ if os.path.exists(app_build):
     
     write_file(app_build, content)
 
-print("\n[Step 2] Write clean build.gradle")
+print("\n[Step 2] Write clean build.gradle (HARDCODED - no variables)")
 root_build = "mobile/android/build.gradle"
 
-clean_build_gradle = """buildscript {
+clean_build_gradle = '''buildscript {
     ext {
         buildToolsVersion = "34.0.0"
         minSdkVersion = 21
         compileSdkVersion = 34
         targetSdkVersion = 34
-        kotlinVersion = """ + TARGET_KOTLIN + """
+        kotlinVersion = "1.9.20"
         hermesEnabled = true
         newArchEnabled = false
     }
@@ -48,7 +44,7 @@ clean_build_gradle = """buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:""" + TARGET_AGP + """'
+        classpath 'com.android.tools.build:gradle:8.3.0'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion"
     }
 }
@@ -72,7 +68,7 @@ subprojects {
     project.configurations.all {
         resolutionStrategy.eachDependency { details ->
             if (details.requested.group == 'org.jetbrains.kotlin' && !details.requested.name.contains('gradle')) {
-                details.useVersion '"" + TARGET_KOTLIN + "'"
+                details.useVersion "1.9.20"
             }
         }
     }
@@ -81,10 +77,10 @@ subprojects {
 task clean(type: Delete) {
     delete rootProject.buildDir
 }
-"""
+'''
 
 write_file(root_build, clean_build_gradle)
-print("  ✓ build.gradle written (clean template)")
+print("  ✓ build.gradle written (100% hardcoded clean template)")
 
 print("\n[Step 3] Configure gradle.properties (clean overwrite)")
 props_path = "mobile/android/gradle.properties"
@@ -103,17 +99,21 @@ print("  ✓ gradle.properties written")
 
 print("\n=== Verification ===")
 root_content = read_file(root_build) or ""
-if TARGET_KOTLIN in root_content:
-    print(f"✓ Kotlin {TARGET_KOTLIN} in build.gradle")
-if TARGET_AGP in root_content:
-    print(f"✓ AGP {TARGET_AGP} in build.gradle")
-if "eachDependency" in root_content:
-    print("✓ Safe Kotlin version force (no afterEvaluate)")
-if "hermesEnabled = true" in root_content:
-    print("✓ hermesEnabled defined")
+if "kotlinVersion = \"1.9.20\"" in root_content:
+    print("✓ kotlinVersion = \"1.9.20\" - CLEAN!")
+if "classpath 'com.android.tools.build:gradle:8.3.0'" in root_content:
+    print("✓ AGP 8.3.0 - CLEAN!")
+if "details.useVersion \"1.9.20\"" in root_content:
+    print("✓ eachDependency force - CLEAN!")
+if '"""' not in root_content and "+ TARGET_KOTLIN" not in root_content:
+    print("✓ No garbage strings - FILE IS CLEAN!")
 
 app_content = read_file(app_build) or ""
 if "hermesEnabled" in app_content:
-    print("✓ hermesEnabled in app/build.gradle")
+    print("✓ hermesEnabled defined")
+
+props_final = read_file(props_path) or ""
+if "hermesEnabled=true" in props_final:
+    print("✓ gradle.properties OK")
 
 print("\n=== Fix script completed ===")

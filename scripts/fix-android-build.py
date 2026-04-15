@@ -1,7 +1,8 @@
 import os
+import re
 
 print("=== Starting Android build fix script ===")
-print("Strategy: Pure buildscript config (NO plugins DSL, NO RN plugin)")
+print("Strategy: Pure Expo config (REMOVE all RN plugins from app/build.gradle)")
 
 def read_file(path):
     if os.path.exists(path):
@@ -13,10 +14,22 @@ def write_file(path, content):
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
 
-print("\n[Step 1] Ensure hermesEnabled is defined in app/build.gradle")
+print("\n[Step 1] Clean app/build.gradle (REMOVE com.facebook.react plugin)")
 app_build = "mobile/android/app/build.gradle"
 if os.path.exists(app_build):
     content = read_file(app_build)
+    original_lines = content.split('\n')
+    
+    cleaned_lines = []
+    removed_count = 0
+    for line in original_lines:
+        if 'com.facebook.react' in line or 'apply plugin' in line and 'react' in line.lower():
+            print(f"  ✗ REMOVED: {line.strip()}")
+            removed_count += 1
+        else:
+            cleaned_lines.append(line)
+    
+    content = '\n'.join(cleaned_lines)
     
     if "hermesEnabled" not in content:
         content = "def hermesEnabled = true\n" + content
@@ -25,8 +38,9 @@ if os.path.exists(app_build):
         print("  ℹ hermesEnabled already present")
     
     write_file(app_build, content)
+    print(f"  ✓ Cleaned app/build.gradle (removed {removed_count} RN plugin lines)")
 
-print("\n[Step 2] Write clean build.gradle (Pure buildscript - NO plugins DSL)")
+print("\n[Step 2] Write clean root build.gradle (Pure buildscript - NO plugins DSL, NO RN plugin)")
 root_build = "mobile/android/build.gradle"
 
 clean_build_gradle = '''buildscript {
@@ -69,7 +83,7 @@ task clean(type: Delete) {
 '''
 
 write_file(root_build, clean_build_gradle)
-print("  ✓ build.gradle written (Pure buildscript - no plugins DSL)")
+print("  ✓ Root build.gradle written (Pure buildscript - no plugins DSL, no RN plugin)")
 
 print("\n[Step 3] Configure gradle.properties (clean overwrite)")
 props_path = "mobile/android/gradle.properties"
@@ -95,18 +109,21 @@ if "kotlinVersion = \"1.9.0\"" in root_content:
 if "classpath 'com.android.tools.build:gradle:8.2.2'" in root_content:
     print("✓ AGP 8.2.2 - CLEAN!")
 if 'plugins {' not in root_content:
-    print("✓ No plugins DSL block - COMPATIBLE!")
+    print("✓ No plugins DSL block in root - COMPATIBLE!")
 if 'com.facebook.react' not in root_content:
-    print("✓ No React Native plugin - PURE EXPO!")
-if '"""' not in root_content and "+ TARGET_KOTLIN" not in root_content:
-    print("✓ No garbage strings - FILE IS CLEAN!")
+    print("✓ No React Native plugin in root - PURE EXPO!")
 
 app_content = read_file(app_build) or ""
+if 'com.facebook.react' not in app_content:
+    print("✓ No React Native plugin in app/build.gradle - EXPO COMPATIBLE!")
 if "hermesEnabled" in app_content:
     print("✓ hermesEnabled defined")
 
 props_final = read_file(props_path) or ""
 if "hermesEnabled=true" in props_final:
     print("✓ gradle.properties OK")
+
+if '"""' not in root_content and "+ TARGET_KOTLIN" not in root_content:
+    print("✓ No garbage strings - FILES ARE CLEAN!")
 
 print("\n=== Fix script completed ===")

@@ -1,12 +1,11 @@
 import os
-import re
 
 print("=== Starting Android build fix script ===")
-print("Strategy: Fix + Force Kotlin version for expo-modules-core & gesture-handler")
+print("Strategy: Clean build.gradle replacement (no more hacks)")
 
-TARGET_AGP = "8.6.0"
+TARGET_AGP = "8.3.0"
 TARGET_KOTLIN = "1.9.20"
-TARGET_RN_GRADLE_PLUGIN = "0.75.4"
+TARGET_RN_GRADLE_PLUGIN = "0.75.0"
 
 def read_file(path):
     if os.path.exists(path):
@@ -17,19 +16,6 @@ def read_file(path):
 def write_file(path, content):
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
-
-def find_insert_position(content, keywords):
-    """Find the best position to insert code (after one of the keywords)"""
-    best_pos = -1
-    for kw in keywords:
-        pos = content.find(kw)
-        if pos >= 0:
-            block_end = content.find("}", pos)
-            if block_end > 0:
-                line_end = content.find("\n", block_end)
-                if line_end > 0:
-                    best_pos = line_end + 1
-    return best_pos
 
 print("\n[Step 1] Ensure hermesEnabled is defined in app/build.gradle")
 app_build = "mobile/android/app/build.gradle"
@@ -44,73 +30,61 @@ if os.path.exists(app_build):
     
     write_file(app_build, content)
 
-print("\n[Step 2] Fix build.gradle classpath + ext versions + force Kotlin")
+print("\n[Step 2] Write clean build.gradle")
 root_build = "mobile/android/build.gradle"
-if os.path.exists(root_build):
-    content = read_file(root_build)
-    
-    content = re.sub(
-        r'com\.android\.tools\.build:gradle:[^"]*"',
-        f'com.android.tools.build:gradle:{TARGET_AGP}',
-        content,
-    )
-    
-    content = re.sub(
-        r'com\.facebook\.react:react-native-gradle-plugin:[^"]*"',
-        f'com.facebook.react:react-native-gradle-plugin:{TARGET_RN_GRADLE_PLUGIN}',
-        content,
-    )
-    
-    content = re.sub(
-        r'org\.jetbrains\.kotlin:kotlin-gradle-plugin:[^"]*"',
-        f'org.jetbrains.kotlin:kotlin-gradle-plugin:{TARGET_KOTLIN}',
-        content,
-    )
-    
-    kotlin_version_patterns = [
-        (r'kotlin_version\s*=\s*"[^"]*"', f'kotlin_version = "{TARGET_KOTLIN}"'),
-        (r'kotlinVersion\s*=\s*"[^"]*"', f'kotlinVersion = "{TARGET_KOTLIN}"'),
-        (r'KOTLIN_VERSION\s*=\s*"[^"]*"', f'KOTLIN_VERSION = "{TARGET_KOTLIN}"'),
-    ]
-    for pattern, replacement in kotlin_version_patterns:
-        if re.search(pattern, content):
-            content = re.sub(pattern, replacement, content)
-            print(f"  ✓ Updated Kotlin version to {TARGET_KOTLIN}")
-            break
-    
-    if "hermesEnabled" not in content and "ext {" in content:
-        content = re.sub(
-            r'(ext\s*\{)',
-            r'\1\n    hermesEnabled = true',
-            content,
-            count=1,
-        )
-        print("  ✓ Added hermesEnabled to ext block")
-    
-    kotlin_force_block = """
 
-allprojects {{
-    configurations.all {{
-        resolutionStrategy {{
-            force "org.jetbrains.kotlin:kotlin-stdlib:""" + TARGET_KOTLIN + """"
-            force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:""" + TARGET_KOTLIN + """"
-            force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:""" + TARGET_KOTLIN + """"
-            force "org.jetbrains.kotlin:kotlin-reflect:""" + TARGET_KOTLIN + """"
-        }}
-    }}
-}}
+clean_build_gradle = """buildscript {
+    ext {
+        buildToolsVersion = "34.0.0"
+        minSdkVersion = 21
+        compileSdkVersion = 34
+        targetSdkVersion = 34
+        kotlinVersion = """ + TARGET_KOTLIN + """
+        hermesEnabled = true
+        newArchEnabled = false
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:""" + TARGET_AGP + """'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion"
+    }
+}
+
+plugins {
+    id "com.facebook.react.rootproject" version "0.75.0"
+}
+
+allprojects {
+    repositories {
+        mavenLocal()
+        maven { url("$rootDir/../node_modules/react-native/android") }
+        maven { url("$rootDir/../node_modules/jsc-android/dist") }
+        google()
+        mavenCentral()
+        jcenter()
+    }
+}
+
+subprojects {
+    project.configurations.all {
+        resolutionStrategy.eachDependency { details ->
+            if (details.requested.group == 'org.jetbrains.kotlin' && !details.requested.name.contains('gradle')) {
+                details.useVersion '"" + TARGET_KOTLIN + "'"
+            }
+        }
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}
 """
-    
-    if "force.*kotlin-stdlib" not in content:
-        insert_pos = find_insert_position(content, ["allprojects", "subprojects", "buildscript"])
-        if insert_pos > 0:
-            content = content[:insert_pos] + kotlin_force_block + "\n" + content[insert_pos:]
-        else:
-            content = content.rstrip() + kotlin_force_block
-        print(f"  ✓ Added global Kotlin version force to {TARGET_KOTLIN}")
-    
-    write_file(root_build, content)
-    print(f"  ✓ AGP: {TARGET_AGP}, Kotlin: {TARGET_KOTLIN}")
+
+write_file(root_build, clean_build_gradle)
+print("  ✓ build.gradle written (clean template)")
 
 print("\n[Step 3] Configure gradle.properties (clean overwrite)")
 props_path = "mobile/android/gradle.properties"
@@ -130,18 +104,16 @@ print("  ✓ gradle.properties written")
 print("\n=== Verification ===")
 root_content = read_file(root_build) or ""
 if TARGET_KOTLIN in root_content:
-    print(f"✓ Kotlin {TARGET_KOTLIN} configured")
+    print(f"✓ Kotlin {TARGET_KOTLIN} in build.gradle")
 if TARGET_AGP in root_content:
-    print(f"✓ AGP {TARGET_AGP} configured")
-if "force.*kotlin-stdlib" in root_content:
-    print("✓ Global Kotlin version force added")
+    print(f"✓ AGP {TARGET_AGP} in build.gradle")
+if "eachDependency" in root_content:
+    print("✓ Safe Kotlin version force (no afterEvaluate)")
+if "hermesEnabled = true" in root_content:
+    print("✓ hermesEnabled defined")
 
 app_content = read_file(app_build) or ""
 if "hermesEnabled" in app_content:
-    print("✓ hermesEnabled defined")
-
-props_final = read_file(props_path) or ""
-if "hermesEnabled=true" in props_final:
-    print("✓ gradle.properties OK")
+    print("✓ hermesEnabled in app/build.gradle")
 
 print("\n=== Fix script completed ===")

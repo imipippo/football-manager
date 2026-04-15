@@ -89,17 +89,17 @@ if os.path.exists(root_build):
     
     kotlin_force_block = """
 
-allprojects {
-    configurations.all {
-        resolutionStrategy {
-            force "org.jetbrains.kotlin:kotlin-stdlib:{}"
-            force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:{}"
-            force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:{}"
-            force "org.jetbrains.kotlin:kotlin-reflect:{}"
-        }
-    }
-}
-""".format(TARGET_KOTLIN, TARGET_KOTLIN, TARGET_KOTLIN, TARGET_KOTLIN)
+allprojects {{
+    configurations.all {{
+        resolutionStrategy {{
+            force "org.jetbrains.kotlin:kotlin-stdlib:""" + TARGET_KOTLIN + """"
+            force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:""" + TARGET_KOTLIN + """"
+            force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:""" + TARGET_KOTLIN + """"
+            force "org.jetbrains.kotlin:kotlin-reflect:""" + TARGET_KOTLIN + """"
+        }}
+    }}
+}}
+"""
     
     if "force.*kotlin-stdlib" not in content:
         insert_pos = find_insert_position(content, ["allprojects", "subprojects", "buildscript"])

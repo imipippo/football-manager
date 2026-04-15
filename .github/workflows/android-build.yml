@@ -88,10 +88,12 @@ jobs:
       - name: Configure Gradle memory
         run: |
           echo "=== Configuring Gradle JVM memory ==="
-          echo "org.gradle.jvmargs=-Xmx4096m -XX:+HeapDumpOnOutOfMemoryError -XX:MaxMetaspaceSize=512m" >> mobile/android/gradle.properties
+          echo "org.gradle.jvmargs=-Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8" >> mobile/android/gradle.properties
           echo "org.gradle.daemon=false" >> mobile/android/gradle.properties
           echo "org.gradle.parallel=true" >> mobile/android/gradle.properties
-          cat mobile/android/gradle.properties | grep -E "jvmargs|daemon|parallel"
+          echo "android.suppressUnsupportedCompileSdk=35" >> mobile/android/gradle.properties
+          echo "android.composeCompiler.suppressKotlinVersionCompatibilityCheck=true" >> mobile/android/gradle.properties
+          cat mobile/android/gradle.properties | grep -E "jvmargs|daemon|parallel|suppress"
           echo "=== Memory configuration done ==="
 
       - name: Verify AGP upgrade
@@ -110,7 +112,7 @@ jobs:
         run: |
           echo "=== Starting Gradle debug build ==="
           export NODE_OPTIONS="--max-old-space-size=4096"
-          export GRADLE_OPTS="-Xmx4096m -XX:+HeapDumpOnOutOfMemoryError"
+          export GRADLE_OPTS="-Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8"
           ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee gradle-debug.log
           echo "=== Debug build exit code: $? ==="
 
@@ -119,7 +121,7 @@ jobs:
         run: |
           echo "=== Starting Gradle release build ==="
           export NODE_OPTIONS="--max-old-space-size=4096"
-          export GRADLE_OPTS="-Xmx4096m -XX:+HeapDumpOnOutOfMemoryError"
+          export GRADLE_OPTS="-Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8"
           ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee gradle-release.log
           echo "=== Release build exit code: $? ==="
 

@@ -77,40 +77,7 @@ if os.path.exists(root_build):
     write_file(root_build, content)
     print(f"  ✓ AGP: {TARGET_AGP}, Kotlin: {TARGET_KOTLIN}")
 
-print("\n[Step 3] Add subprojects Kotlin compatibility block")
-subprojects_block = """
-
-subprojects {
-    afterEvaluate {
-        if (project.plugins.hasPlugin("kotlin-android")) {
-            kotlin {
-                jvmToolchain(17)
-            }
-            tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-                kotlinOptions {
-                    jvmTarget = "17"
-                    freeCompilerArgs += [
-                        "-Xsuppress-version-warnings",
-                        "-Xskip-prerelease-check",
-                        "-Xjsr305=strict"
-                    ]
-                }
-            }
-        }
-    }
-}
-"""
-
-if os.path.exists(root_build):
-    content = read_file(root_build)
-    if "jvmToolchain(17)" not in content:
-        content = content.rstrip() + subprojects_block
-        write_file(root_build, content)
-        print("  ✓ Added Kotlin compatibility block")
-    else:
-        print("  ℹ Kotlin compatibility block already exists")
-
-print("\n[Step 4] Configure gradle.properties (clean overwrite)")
+print("\n[Step 3] Configure gradle.properties (clean overwrite)")
 props_path = "mobile/android/gradle.properties"
 
 final_props = """android.useAndroidX=true
@@ -131,8 +98,6 @@ if TARGET_KOTLIN in root_content:
     print(f"✓ Kotlin {TARGET_KOTLIN} configured")
 if TARGET_AGP in root_content:
     print(f"✓ AGP {TARGET_AGP} configured")
-if "jvmToolchain(17)" in root_content:
-    print("✓ Kotlin compatibility block added")
 
 app_content = read_file(app_build) or ""
 if "hermesEnabled" in app_content:

@@ -2,7 +2,7 @@ import os
 import re
 
 print("=== Starting Android build fix script ===")
-print("Strategy: Complete compatibility fix with hermesEnabled defined")
+print("Strategy: Fix + Force Kotlin version for expo-modules-core & gesture-handler")
 
 TARGET_AGP = "8.6.0"
 TARGET_KOTLIN = "1.9.20"
@@ -18,6 +18,19 @@ def write_file(path, content):
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
 
+def find_insert_position(content, keywords):
+    """Find the best position to insert code (after one of the keywords)"""
+    best_pos = -1
+    for kw in keywords:
+        pos = content.find(kw)
+        if pos >= 0:
+            block_end = content.find("}", pos)
+            if block_end > 0:
+                line_end = content.find("\n", block_end)
+                if line_end > 0:
+                    best_pos = line_end + 1
+    return best_pos
+
 print("\n[Step 1] Ensure hermesEnabled is defined in app/build.gradle")
 app_build = "mobile/android/app/build.gradle"
 if os.path.exists(app_build):
@@ -31,7 +44,7 @@ if os.path.exists(app_build):
     
     write_file(app_build, content)
 
-print("\n[Step 2] Fix build.gradle classpath + ext versions")
+print("\n[Step 2] Fix build.gradle classpath + ext versions + force Kotlin")
 root_build = "mobile/android/build.gradle"
 if os.path.exists(root_build):
     content = read_file(root_build)
@@ -74,6 +87,28 @@ if os.path.exists(root_build):
         )
         print("  ✓ Added hermesEnabled to ext block")
     
+    kotlin_force_block = """
+
+allprojects {
+    configurations.all {
+        resolutionStrategy {
+            force "org.jetbrains.kotlin:kotlin-stdlib:{}"
+            force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:{}"
+            force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:{}"
+            force "org.jetbrains.kotlin:kotlin-reflect:{}"
+        }
+    }
+}
+""".format(TARGET_KOTLIN, TARGET_KOTLIN, TARGET_KOTLIN, TARGET_KOTLIN)
+    
+    if "force.*kotlin-stdlib" not in content:
+        insert_pos = find_insert_position(content, ["allprojects", "subprojects", "buildscript"])
+        if insert_pos > 0:
+            content = content[:insert_pos] + kotlin_force_block + "\n" + content[insert_pos:]
+        else:
+            content = content.rstrip() + kotlin_force_block
+        print(f"  ✓ Added global Kotlin version force to {TARGET_KOTLIN}")
+    
     write_file(root_build, content)
     print(f"  ✓ AGP: {TARGET_AGP}, Kotlin: {TARGET_KOTLIN}")
 
@@ -90,7 +125,7 @@ org.gradle.caching=true
 """
 
 write_file(props_path, final_props.strip() + "\n")
-print("  ✓ gradle.properties written with hermesEnabled=true")
+print("  ✓ gradle.properties written")
 
 print("\n=== Verification ===")
 root_content = read_file(root_build) or ""
@@ -98,13 +133,15 @@ if TARGET_KOTLIN in root_content:
     print(f"✓ Kotlin {TARGET_KOTLIN} configured")
 if TARGET_AGP in root_content:
     print(f"✓ AGP {TARGET_AGP} configured")
+if "force.*kotlin-stdlib" in root_content:
+    print("✓ Global Kotlin version force added")
 
 app_content = read_file(app_build) or ""
 if "hermesEnabled" in app_content:
-    print("✓ hermesEnabled defined in app/build.gradle")
+    print("✓ hermesEnabled defined")
 
 props_final = read_file(props_path) or ""
 if "hermesEnabled=true" in props_final:
-    print("✓ hermesEnabled=true in gradle.properties")
+    print("✓ gradle.properties OK")
 
 print("\n=== Fix script completed ===")

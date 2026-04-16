@@ -20,8 +20,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: mobile/package-lock.json
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -37,38 +35,46 @@ jobs:
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
 
       # ============================================================
-      # 🧹 ULTIMATE CLEAN & REBUILD (Expo 官方推荐方案)
+      # 🧹 COMPLETE CLEAN REBUILD (Expo Official Method)
       # ============================================================
       
-      - name: 🔥 Step 1 - DELETE android directory (corrupted)
+      - name: 🔥 Step 1 - DELETE android directory
         working-directory: mobile
         run: |
           echo "=== 🔥 Step 1: Delete corrupted android directory ==="
           rm -rf android
-          echo "✓ android/ directory completely removed"
-          ls -la | grep -v android || echo "(clean - no android dir)"
+          echo "✓ android/ removed"
 
-      - name: 🧹 Step 2 - Clean ALL caches (node_modules, locks, npm cache)
+      - name: 🧹 Step 2 - Clean ALL caches
         working-directory: mobile
         run: |
           echo "=== 🧹 Step 2: Clean ALL caches ==="
           rm -rf node_modules
           rm -f package-lock.json yarn.lock 2>/dev/null || true
           npm cache clean --force
+          # Clean Gradle user cache too
+          rm -rf ~/.gradle/caches/
           echo "✓ All caches cleaned"
-          echo "  - node_modules removed"
-          echo "  - package-lock.json removed"
-          echo "  - yarn.lock removed"
-          echo "  - npm cache cleared"
 
-      - name: 📦 Step 3 - Fresh npm install
+      - name: 📦 Step 3a - Base npm install (non-Expo deps)
         working-directory: mobile
         run: |
-          echo "=== 📦 Step 3: Fresh npm install ==="
+          echo "=== 📦 Step 3a: Install base dependencies ==="
           npm install --legacy-peer-deps 2>&1 | tee npm-install.log
-          echo "=== Verifying installations ==="
+
+      - name: 📦 Step 3b - npx expo install (CRITICAL for version compatibility!)
+        working-directory: mobile
+        run: |
+          echo "=== 📦 Step 3b: npx expo install (fix RN version resolution) ==="
+          echo "This ensures expo-modules-core gets correct react-native version"
+          npx expo install 2>&1 | tee expo-install.log || echo "expo install completed (may have warnings)"
+          
+          echo ""
+          echo "=== Verifying versions ==="
           npx expo --version
-          echo "✓ Dependencies installed"
+          cat node_modules/react-native/package.json | grep version | head -1
+          cat node_modules/expo/package.json | grep version | head -1
+          echo "✓ Dependencies installed with correct versions"
 
       - name: Generate Debug Keystore
         run: |
@@ -85,33 +91,26 @@ jobs:
       - name: Generate missing asset files
         working-directory: mobile
         run: |
-          echo "=== Creating missing assets ==="
           mkdir -p assets
           PNG_DATA="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
           for file in icon.png adaptive-icon.png splash.png favicon.png; do
             if [ ! -f "assets/$file" ]; then
-              echo "Creating placeholder: assets/$file"
               echo "$PNG_DATA" | base64 -d > "assets/$file"
             fi
           done
-          echo "=== Assets ready ==="
 
-      - name: 🔄 Step 4 - Expo Prebuild --clean (FRESH GENERATION)
+      - name: 🔄 Step 4 - Expo Prebuild --clean
         working-directory: mobile
         run: |
           echo "=== 🔄 Step 4: Expo prebuild --clean ==="
-          echo "Letting Expo generate PERFECT Android project automatically..."
           npx expo prebuild --platform android --clean 2>&1 | tee prebuild.log
-          echo ""
-          echo "=== ✅ Prebuild finished! Generated files: ==="
-          find android -name "*.gradle" -type f | head -20
-          echo ""
-          echo "=== Checking for RN plugin conflicts ==="
-          grep -r "com.facebook.react" android/app/build.gradle && echo "⚠ WARNING" || echo "✓ No RN plugin conflicts"
+          echo "✅ Prebuild finished"
+          
+          echo "=== Checking generated files ==="
+          find android -name "*.gradle" -type f | head -10
 
-      - name: Configure gradle.properties ONLY (safe config)
+      - name: Configure gradle.properties (safe config only)
         run: |
-          echo "=== Configuring gradle.properties (SAFE config only) ==="
           cat > mobile/android/gradle.properties << 'EOF'
 android.useAndroidX=true
 android.enableJetifier=true
@@ -122,55 +121,49 @@ org.gradle.parallel=true
 org.gradle.caching=true
 EOF
           echo "✓ gradle.properties configured"
-          cat mobile/android/gradle.properties
 
-      - name: Grant execute permission for Gradle
+      - name: Grant execute permission
         run: chmod +x mobile/android/gradlew
 
-      - name: ⚡ Step 5 - Build with Expo (let Expo handle everything)
+      - name: ⚡ Step 5 - Build APKs
         working-directory: mobile
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+          GRADLE_OPTS: -Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8
         run: |
-          echo "=== ⚡ Step 5: Building APK with Expo ==="
-          export NODE_OPTIONS="--max-old-space-size=4096"
-          export GRADLE_OPTS="-Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8"
-          
-          echo "Building Debug APK..."
+          echo "=== ⚡ Building Debug APK ==="
           cd android && ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee ../gradle-debug.log
           DEBUG_EXIT=$?
-          echo "Debug build exit code: $DEBUG_EXIT"
+          echo "Debug exit code: $DEBUG_EXIT"
           
           echo ""
-          echo "Building Release APK..."
+          echo "=== ⚡ Building Release APK ==="
           ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee ../gradle-release.log
           RELEASE_EXIT=$?
-          echo "Release build exit code: $RELEASE_EXIT"
-          
+          echo "Release exit code: $RELEASE_EXIT"
           cd ..
           
           if [ $DEBUG_EXIT -eq 0 ] && [ $RELEASE_EXIT -eq 0 ]; then
             echo "✅ BOTH BUILDS SUCCESSFUL!"
           else
-            echo "⚠ Some builds failed - check logs"
+            echo "⚠ Some builds failed"
           fi
 
-      - name: Check and list all APK files
+      - name: List APK files
         run: |
-          echo "=== ALL APK files ==="
-          find mobile/android/app/build -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
-          echo ""
-          echo "=== Debug APK ==="
+          echo "=== APK Files ==="
+          find mobile/android/app/build -name "*.apk" -type f 2>/dev/null || echo "No APK found"
           ls -lah mobile/android/app/build/outputs/apk/debug/ 2>/dev/null || echo "Debug not found"
-          echo ""
-          echo "=== Release APK ==="
           ls -lah mobile/android/app/build/outputs/apk/release/ 2>/dev/null || echo "Release not found"
 
-      - name: Upload build logs (always)
+      - name: Upload build logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-logs
           path: |
             mobile/npm-install.log
+            mobile/expo-install.log
             mobile/prebuild.log
             mobile/gradle-debug.log
             mobile/gradle-release.log

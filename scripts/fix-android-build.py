@@ -2,7 +2,7 @@ import os
 import re
 
 print("=== Starting Android build fix script ===")
-print("Strategy: Pure Expo config (REMOVE all RN plugins from app/build.gradle)")
+print("Strategy: Fix app/build.gradle (remove react{} block + add missing SDK config)")
 
 def read_file(path):
     if os.path.exists(path):
@@ -14,33 +14,95 @@ def write_file(path, content):
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
 
-print("\n[Step 1] Clean app/build.gradle (REMOVE com.facebook.react plugin)")
+def remove_react_block(content):
+    """Remove react { ... } configuration block"""
+    lines = content.split('\n')
+    result = []
+    in_react_block = False
+    brace_count = 0
+    removed = 0
+    
+    for line in lines:
+        stripped = line.strip()
+        
+        # Check if this line starts a react block
+        if re.match(r'^react\s*\{', stripped) and not in_react_block:
+            in_react_block = True
+            brace_count = stripped.count('{') - stripped.count('}')
+            print(f"  ✗ REMOVED: react {{ ... }} block started")
+            removed += 1
+            continue
+        
+        # If we're inside a react block, track braces
+        if in_react_block:
+            brace_count += stripped.count('{') - stripped.count('}')
+            if brace_count <= 0:
+                in_react_block = False
+                continue
+            else:
+                continue
+        
+        result.append(line)
+    
+    return '\n'.join(result), removed
+
+print("\n[Step 1] Clean app/build.gradle (REMOVE RN plugins + react{} block)")
 app_build = "mobile/android/app/build.gradle"
 if os.path.exists(app_build):
     content = read_file(app_build)
-    original_lines = content.split('\n')
+    original_content = content
     
+    # Remove com.facebook.react plugin lines
+    lines = content.split('\n')
     cleaned_lines = []
-    removed_count = 0
-    for line in original_lines:
-        if 'com.facebook.react' in line or 'apply plugin' in line and 'react' in line.lower():
-            print(f"  ✗ REMOVED: {line.strip()}")
-            removed_count += 1
+    rn_removed = 0
+    for line in lines:
+        if 'com.facebook.react' in line or ('apply plugin' in line and 'react' in line.lower()):
+            print(f"  ✗ REMOVED RN plugin: {line.strip()}")
+            rn_removed += 1
         else:
             cleaned_lines.append(line)
     
     content = '\n'.join(cleaned_lines)
     
+    # Remove react { ... } configuration block
+    content, react_removed = remove_react_block(content)
+    
+    # Ensure hermesEnabled is defined
     if "hermesEnabled" not in content:
         content = "def hermesEnabled = true\n" + content
         print("  ✓ Added hermesEnabled definition")
     else:
         print("  ℹ hermesEnabled already present")
     
+    # Ensure compileSdkVersion is present
+    if 'compileSdkVersion' not in content or 'rootProject.ext.compileSdkVersion' not in content:
+        # Add android block with required config if missing
+        if 'android {' not in content:
+            # Insert android block after apply plugin lines
+            android_config = '''
+android {
+    compileSdkVersion rootProject.ext.compileSdkVersion
+    buildToolsVersion rootProject.ext.buildToolsVersion
+    namespace "com.footballmanager"
+    defaultConfig {
+        applicationId "com.footballmanager"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        versionName "1.0.0"
+    }
+}
+'''
+            content = content + android_config
+            print("  ✓ Added android {} block with SDK config")
+        else:
+            print("  ℹ android {} block already exists")
+    
     write_file(app_build, content)
-    print(f"  ✓ Cleaned app/build.gradle (removed {removed_count} RN plugin lines)")
+    print(f"  ✓ Cleaned app/build.gradle (removed {rn_removed} RN plugin, {react_removed} react blocks)")
 
-print("\n[Step 2] Write clean root build.gradle (Pure buildscript - NO plugins DSL, NO RN plugin)")
+print("\n[Step 2] Write clean root build.gradle (Pure buildscript with all required vars)")
 root_build = "mobile/android/build.gradle"
 
 clean_build_gradle = '''buildscript {
@@ -83,7 +145,7 @@ task clean(type: Delete) {
 '''
 
 write_file(root_build, clean_build_gradle)
-print("  ✓ Root build.gradle written (Pure buildscript - no plugins DSL, no RN plugin)")
+print("  ✓ Root build.gradle written (all required variables defined)")
 
 print("\n[Step 3] Configure gradle.properties (clean overwrite)")
 props_path = "mobile/android/gradle.properties"
@@ -104,6 +166,8 @@ print("\n=== Verification ===")
 root_content = read_file(root_build) or ""
 if 'ndkVersion = "25.1.8937393"' in root_content:
     print("✓ ndkVersion defined!")
+if "compileSdkVersion = 34" in root_content:
+    print("✓ compileSdkVersion defined!")
 if "kotlinVersion = \"1.9.0\"" in root_content:
     print("✓ kotlinVersion = \"1.9.0\" - Standard Expo version!")
 if "classpath 'com.android.tools.build:gradle:8.2.2'" in root_content:
@@ -116,6 +180,14 @@ if 'com.facebook.react' not in root_content:
 app_content = read_file(app_build) or ""
 if 'com.facebook.react' not in app_content:
     print("✓ No React Native plugin in app/build.gradle - EXPO COMPATIBLE!")
+if 'react {' not in app_content or 'react{' not in app_content:
+    print("✓ No react {} configuration block - CLEAN!")
+else:
+    print("⚠ WARNING: react {} block still found!")
+if "compileSdkVersion" in app_content:
+    print("✓ compileSdkVersion found in app/build.gradle!")
+else:
+    print("❌ ERROR: compileSdkVersion MISSING in app/build.gradle!")
 if "hermesEnabled" in app_content:
     print("✓ hermesEnabled defined")
 

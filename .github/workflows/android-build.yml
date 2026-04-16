@@ -65,7 +65,7 @@ jobs:
           echo "=== Verifying versions ==="
           npx expo --version
           cat node_modules/react-native/package.json | grep version | head -1
-          cat node_modules/expo/package.json | grep version | head-1
+          cat node_modules/expo/package.json | grep version | head -1
           echo "Done - Dependencies installed"
 
       - name: Generate Debug Keystore

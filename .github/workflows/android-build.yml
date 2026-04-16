@@ -103,7 +103,6 @@ jobs:
             echo "ERROR: Expo prebuild failed!"
             exit 1
           fi
-          
           echo "=== Verifying android directory was created ==="
           if [ ! -d android ]; then
             echo "ERROR: android directory was NOT created by prebuild!"
@@ -126,7 +125,7 @@ jobs:
             -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US" || true
 
-      - name: Configure gradle.properties (FIX Kotlin version!)
+      - name: Configure gradle.properties with Kotlin 1.9.25
         run: |
           echo "=== Checking if android directory exists ==="
           if [ ! -d mobile/android ]; then
@@ -134,45 +133,17 @@ jobs:
             exit 1
           fi
           
-          cat > mobile/android/gradle.properties << 'GRADLEEOF'
-android.useAndroidX=true
-android.enableJetifier=true
-hermesEnabled=true
-kotlin.version=1.9.25
-org.gradle.jvmargs=-Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8
-org.gradle.daemon=false
-org.gradle.parallel=true
-org.gradle.caching=true
-GRADLEEOF
+          echo "android.useAndroidX=true" > mobile/android/gradle.properties
+          echo "android.enableJetifier=true" >> mobile/android/gradle.properties
+          echo "hermesEnabled=true" >> mobile/android/gradle.properties
+          echo "kotlin.version=1.9.25" >> mobile/android/gradle.properties
+          echo "org.gradle.jvmargs=-Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8" >> mobile/android/gradle.properties
+          echo "org.gradle.daemon=false" >> mobile/android/gradle.properties
+          echo "org.gradle.parallel=true" >> mobile/android/gradle.properties
+          echo "org.gradle.caching=true" >> mobile/android/gradle.properties
           
           echo "Done - gradle.properties configured with Kotlin 1.9.25"
           cat mobile/android/gradle.properties
-
-      - name: Fix Kotlin version in build.gradle
-        run: |
-          echo "=== Ensuring Kotlin version is set to 1.9.25 ==="
-          ROOT_BUILD_FILE="mobile/android/build.gradle"
-          
-          if [ -f "$ROOT_BUILD_FILE" ]; then
-            # Check if ext.kotlinVersion exists and fix it
-            if grep -q "ext.kotlinVersion" "$ROOT_BUILD_FILE"; then
-              echo "Found kotlinVersion, updating to 1.9.25..."
-              sed -i 's/ext\.kotlinVersion = .*/ext.kotlinVersion = "1.9.25"/' "$ROOT_BUILD_FILE"
-            else
-              echo "kotlinVersion not found in root build.gradle (will use gradle.properties)"
-            fi
-            
-            # Also check settings.gradle for kotlin version
-            SETTINGS_FILE="mobile/android/settings.gradle"
-            if [ -f "$SETTINGS_FILE" ] && grep -q "kotlinVersion" "$SETTINGS_FILE"; then
-              echo "Found kotlinVersion in settings.gradle, updating..."
-              # This is tricky with toml files, so we'll rely on gradle.properties
-            fi
-          else
-            echo "WARNING: Root build.gradle not found"
-          fi
-          
-          echo "Done - Kotlin version configuration complete"
 
       - name: Grant execute permission
         run: |

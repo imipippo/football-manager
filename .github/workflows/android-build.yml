@@ -34,47 +34,39 @@ jobs:
         run: |
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
 
-      # ============================================================
-      # 🧹 COMPLETE CLEAN REBUILD (Expo Official Method)
-      # ============================================================
-      
-      - name: 🔥 Step 1 - DELETE android directory
+      - name: Step 1 - DELETE android directory
         working-directory: mobile
         run: |
-          echo "=== 🔥 Step 1: Delete corrupted android directory ==="
+          echo "=== Step 1: Delete corrupted android directory ==="
           rm -rf android
-          echo "✓ android/ removed"
+          echo "Done - android/ removed"
 
-      - name: 🧹 Step 2 - Clean ALL caches
+      - name: Step 2 - Clean ALL caches
         working-directory: mobile
         run: |
-          echo "=== 🧹 Step 2: Clean ALL caches ==="
+          echo "=== Step 2: Clean ALL caches ==="
           rm -rf node_modules
           rm -f package-lock.json yarn.lock 2>/dev/null || true
           npm cache clean --force
-          # Clean Gradle user cache too
           rm -rf ~/.gradle/caches/
-          echo "✓ All caches cleaned"
+          echo "Done - All caches cleaned"
 
-      - name: 📦 Step 3a - Base npm install (non-Expo deps)
+      - name: Step 3a - Base npm install
         working-directory: mobile
         run: |
-          echo "=== 📦 Step 3a: Install base dependencies ==="
+          echo "=== Step 3a: Install base dependencies ==="
           npm install --legacy-peer-deps 2>&1 | tee npm-install.log
 
-      - name: 📦 Step 3b - npx expo install (CRITICAL for version compatibility!)
+      - name: Step 3b - npx expo install
         working-directory: mobile
         run: |
-          echo "=== 📦 Step 3b: npx expo install (fix RN version resolution) ==="
-          echo "This ensures expo-modules-core gets correct react-native version"
-          npx expo install 2>&1 | tee expo-install.log || echo "expo install completed (may have warnings)"
-          
-          echo ""
+          echo "=== Step 3b: npx expo install ==="
+          npx expo install 2>&1 | tee expo-install.log || echo "expo install completed"
           echo "=== Verifying versions ==="
           npx expo --version
           cat node_modules/react-native/package.json | grep version | head -1
-          cat node_modules/expo/package.json | grep version | head -1
-          echo "✓ Dependencies installed with correct versions"
+          cat node_modules/expo/package.json | grep version | head-1
+          echo "Done - Dependencies installed"
 
       - name: Generate Debug Keystore
         run: |
@@ -99,54 +91,51 @@ jobs:
             fi
           done
 
-      - name: 🔄 Step 4 - Expo Prebuild --clean
+      - name: Step 4 - Expo Prebuild --clean
         working-directory: mobile
         run: |
-          echo "=== 🔄 Step 4: Expo prebuild --clean ==="
+          echo "=== Step 4: Expo prebuild --clean ==="
           npx expo prebuild --platform android --clean 2>&1 | tee prebuild.log
-          echo "✅ Prebuild finished"
-          
-          echo "=== Checking generated files ==="
+          echo "Done - Prebuild finished"
           find android -name "*.gradle" -type f | head -10
 
-      - name: Configure gradle.properties (safe config only)
+      - name: Configure gradle.properties
         run: |
-          cat > mobile/android/gradle.properties << 'EOF'
-android.useAndroidX=true
-android.enableJetifier=true
-hermesEnabled=true
-org.gradle.jvmargs=-Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8
-org.gradle.daemon=false
-org.gradle.parallel=true
-org.gradle.caching=true
-EOF
-          echo "✓ gradle.properties configured"
+          echo "android.useAndroidX=true" > mobile/android/gradle.properties
+          echo "android.enableJetifier=true" >> mobile/android/gradle.properties
+          echo "hermesEnabled=true" >> mobile/android/gradle.properties
+          echo "org.gradle.jvmargs=-Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8" >> mobile/android/gradle.properties
+          echo "org.gradle.daemon=false" >> mobile/android/gradle.properties
+          echo "org.gradle.parallel=true" >> mobile/android/gradle.properties
+          echo "org.gradle.caching=true" >> mobile/android/gradle.properties
+          echo "Done - gradle.properties configured"
+          cat mobile/android/gradle.properties
 
       - name: Grant execute permission
         run: chmod +x mobile/android/gradlew
 
-      - name: ⚡ Step 5 - Build APKs
+      - name: Step 5 - Build APKs
         working-directory: mobile
         env:
           NODE_OPTIONS: --max-old-space-size=4096
           GRADLE_OPTS: -Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8
         run: |
-          echo "=== ⚡ Building Debug APK ==="
+          echo "=== Building Debug APK ==="
           cd android && ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee ../gradle-debug.log
           DEBUG_EXIT=$?
           echo "Debug exit code: $DEBUG_EXIT"
           
           echo ""
-          echo "=== ⚡ Building Release APK ==="
+          echo "=== Building Release APK ==="
           ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee ../gradle-release.log
           RELEASE_EXIT=$?
           echo "Release exit code: $RELEASE_EXIT"
           cd ..
           
           if [ $DEBUG_EXIT -eq 0 ] && [ $RELEASE_EXIT -eq 0 ]; then
-            echo "✅ BOTH BUILDS SUCCESSFUL!"
+            echo "SUCCESS: Both builds completed!"
           else
-            echo "⚠ Some builds failed"
+            echo "WARNING: Some builds failed"
           fi
 
       - name: List APK files

@@ -79,18 +79,6 @@ jobs:
           ls node_modules/expo-modules-core/package.json 2>/dev/null && cat node_modules/expo-modules-core/package.json | grep '"version"' | head -1 || echo "not found"
           echo "Done - Dependencies installed"
 
-      - name: Generate Debug Keystore
-        run: |
-          keytool -genkeypair \
-            -v -keystore mobile/android/app/debug.keystore \
-            -storepass android \
-            -alias androiddebugkey \
-            -keypass android \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US" || true
-
       - name: Generate missing asset files
         working-directory: mobile
         run: |
@@ -103,15 +91,50 @@ jobs:
           done
 
       - name: Step 4 - Expo Prebuild --clean
+        id: prebuild
         working-directory: mobile
         run: |
           echo "=== Step 4: Expo prebuild --clean ==="
           npx expo prebuild --platform android --clean 2>&1 | tee prebuild.log
-          echo "Done - Prebuild finished"
+          PREBUILD_EXIT=$?
+          echo "Prebuild exit code: $PREBUILD_EXIT"
+          
+          if [ $PREBUILD_EXIT -ne 0 ]; then
+            echo "ERROR: Expo prebuild failed!"
+            exit 1
+          fi
+          
+          echo "=== Verifying android directory was created ==="
+          if [ ! -d android ]; then
+            echo "ERROR: android directory was NOT created by prebuild!"
+            exit 1
+          fi
+          
+          echo "✓ android directory exists"
           find android -name "*.gradle" -type f | head -10
+          echo "Done - Prebuild finished successfully"
+
+      - name: Generate Debug Keystore
+        run: |
+          keytool -genkeypair \
+            -v -keystore mobile/android/app/debug.keystore \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US" || true
 
       - name: Configure gradle.properties
         run: |
+          echo "=== Checking if android directory exists ==="
+          if [ ! -d mobile/android ]; then
+            echo "ERROR: mobile/android directory does not exist!"
+            echo "Expo prebuild may have failed."
+            exit 1
+          fi
+          
           echo "android.useAndroidX=true" > mobile/android/gradle.properties
           echo "android.enableJetifier=true" >> mobile/android/gradle.properties
           echo "hermesEnabled=true" >> mobile/android/gradle.properties
@@ -123,7 +146,13 @@ jobs:
           cat mobile/android/gradle.properties
 
       - name: Grant execute permission
-        run: chmod +x mobile/android/gradlew
+        run: |
+          if [ ! -f mobile/android/gradlew ]; then
+            echo "ERROR: gradlew not found!"
+            exit 1
+          fi
+          chmod +x mobile/android/gradlew
+          echo "✓ gradlew permission granted"
 
       - name: Step 5 - Build APKs
         working-directory: mobile

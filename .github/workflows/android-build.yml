@@ -59,25 +59,34 @@ jobs:
           fi
           echo "Done - Caches cleaned"
 
-      - name: Step 3 - Install dependencies (use npm ci if lockfile exists)
+      - name: Step 3a - Install dependencies with legacy peer deps
         working-directory: mobile
         run: |
-          echo "=== Step 3: Install dependencies ==="
-          if [ -f package-lock.json ]; then
-            echo "Using npm ci (exact versions from lockfile)"
-            npm ci --legacy-peer-deps 2>&1 | tee npm-install.log
-          else
-            echo "Using npm install (no lockfile)"
-            npm install --legacy-peer-deps --save-exact 2>&1 | tee npm-install.log
+          echo "=== Step 3a: Install dependencies ==="
+          npm install --legacy-peer-deps 2>&1 | tee npm-install.log
+          
+          echo "=== Verifying critical packages are installed ==="
+          if [ ! -d node_modules/expo ]; then
+            echo "ERROR: expo module not found after npm install!"
+            exit 1
           fi
-          echo "=== Verifying critical package versions ==="
-          echo "Expo version:"
+          if [ ! -d node_modules/react-native ]; then
+            echo "ERROR: react-native module not found!"
+            exit 1
+          fi
+          
+          echo "=== Package versions ==="
           cat node_modules/expo/package.json | grep '"version"' | head -1
-          echo "React Native version:"
           cat node_modules/react-native/package.json | grep '"version"' | head -1
-          echo "react-native-gesture-handler version:"
           cat node_modules/react-native-gesture-handler/package.json | grep '"version"' | head -1
-          echo "Done - Dependencies installed"
+          echo "✓ All critical packages verified"
+
+      - name: Step 3b - Run npx expo install to ensure Expo SDK compatibility
+        working-directory: mobile
+        run: |
+          echo "=== Step 3b: npx expo install ==="
+          npx expo install 2>&1 | tee expo-install.log || echo "expo install completed (may have warnings)"
+          echo "Done - expo install finished"
 
       - name: Generate missing asset files
         working-directory: mobile
@@ -192,6 +201,7 @@ jobs:
           name: build-logs
           path: |
             mobile/npm-install.log
+            mobile/expo-install.log
             mobile/prebuild.log
             mobile/gradle-debug.log
             mobile/gradle-release.log

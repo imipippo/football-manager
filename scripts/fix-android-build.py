@@ -2,7 +2,7 @@ import os
 import re
 
 print("=== Starting Android build fix script ===")
-print("Strategy: Fix app/build.gradle (remove react{} block + add missing SDK config)")
+print("Strategy: MINIMAL changes - preserve Expo prebuild output")
 
 def read_file(path):
     if os.path.exists(path):
@@ -13,6 +13,19 @@ def read_file(path):
 def write_file(path, content):
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
+
+def remove_lines_containing(content, patterns):
+    """Remove lines containing any of the given patterns"""
+    lines = content.split('\n')
+    result = []
+    removed = 0
+    for line in lines:
+        if any(pattern in line for pattern in patterns):
+            print(f"  ✗ REMOVED: {line.strip()}")
+            removed += 1
+        else:
+            result.append(line)
+    return '\n'.join(result), removed
 
 def remove_react_block(content):
     """Remove react { ... } configuration block"""
@@ -25,127 +38,73 @@ def remove_react_block(content):
     for line in lines:
         stripped = line.strip()
         
-        # Check if this line starts a react block
         if re.match(r'^react\s*\{', stripped) and not in_react_block:
             in_react_block = True
             brace_count = stripped.count('{') - stripped.count('}')
-            print(f"  ✗ REMOVED: react {{ ... }} block started")
+            print(f"  ✗ REMOVED: react {{ ... }} block")
             removed += 1
             continue
         
-        # If we're inside a react block, track braces
         if in_react_block:
             brace_count += stripped.count('{') - stripped.count('}')
             if brace_count <= 0:
                 in_react_block = False
-                continue
-            else:
-                continue
+            continue
         
         result.append(line)
     
     return '\n'.join(result), removed
 
-print("\n[Step 1] Clean app/build.gradle (REMOVE RN plugins + react{} block)")
+print("\n[Step 1] Clean app/build.gradle (MINIMAL changes only)")
 app_build = "mobile/android/app/build.gradle"
 if os.path.exists(app_build):
     content = read_file(app_build)
-    original_content = content
     
-    # Remove com.facebook.react plugin lines
-    lines = content.split('\n')
-    cleaned_lines = []
-    rn_removed = 0
-    for line in lines:
-        if 'com.facebook.react' in line or ('apply plugin' in line and 'react' in line.lower()):
-            print(f"  ✗ REMOVED RN plugin: {line.strip()}")
-            rn_removed += 1
-        else:
-            cleaned_lines.append(line)
-    
-    content = '\n'.join(cleaned_lines)
+    # Remove React Native plugin/dependency references
+    rn_patterns = [
+        'com.facebook.react',
+        'react-android',
+        'react-native',
+        "apply plugin.*react",
+        "id 'com.facebook.react'",
+    ]
+    content, rn_removed = remove_lines_containing(content, rn_patterns)
     
     # Remove react { ... } configuration block
     content, react_removed = remove_react_block(content)
     
-    # Ensure hermesEnabled is defined
+    # Ensure hermesEnabled is defined at the top
     if "hermesEnabled" not in content:
         content = "def hermesEnabled = true\n" + content
         print("  ✓ Added hermesEnabled definition")
     else:
         print("  ℹ hermesEnabled already present")
     
-    # Ensure compileSdkVersion is present
-    if 'compileSdkVersion' not in content or 'rootProject.ext.compileSdkVersion' not in content:
-        # Add android block with required config if missing
-        if 'android {' not in content:
-            # Insert android block after apply plugin lines
-            android_config = '''
-android {
-    compileSdkVersion rootProject.ext.compileSdkVersion
-    buildToolsVersion rootProject.ext.buildToolsVersion
-    namespace "com.footballmanager"
-    defaultConfig {
-        applicationId "com.footballmanager"
-        minSdkVersion rootProject.ext.minSdkVersion
-        targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0.0"
-    }
-}
-'''
-            content = content + android_config
-            print("  ✓ Added android {} block with SDK config")
-        else:
-            print("  ℹ android {} block already exists")
-    
     write_file(app_build, content)
-    print(f"  ✓ Cleaned app/build.gradle (removed {rn_removed} RN plugin, {react_removed} react blocks)")
+    total_removed = rn_removed + react_removed
+    if total_removed > 0:
+        print(f"  ✓ Cleaned app/build.gradle (removed {total_removed} RN-related lines)")
+    else:
+        print("  ✓ app/build.gradle already clean (no changes needed)")
 
-print("\n[Step 2] Write clean root build.gradle (Pure buildscript with all required vars)")
+print("\n[Step 2] DO NOT modify root build.gradle (preserve Expo prebuild output)")
 root_build = "mobile/android/build.gradle"
-
-clean_build_gradle = '''buildscript {
-    ext {
-        buildToolsVersion = "34.0.0"
-        minSdkVersion = 21
-        compileSdkVersion = 34
-        targetSdkVersion = 34
-        ndkVersion = "25.1.8937393"
-        kotlinVersion = "1.9.0"
-        hermesEnabled = true
-        newArchEnabled = false
-    }
-    repositories {
-        google()
-        mavenCentral()
-    }
-    dependencies {
-        classpath 'com.android.tools.build:gradle:8.2.2'
-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion"
-    }
-}
-
-allprojects {
-    repositories {
-        mavenLocal()
-        maven {
-          url new File(['node', '--print', "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim(), '../android')
-        }
-        maven { url "$rootDir/../node_modules/jsc-android/dist" }
-        google()
-        mavenCentral()
-        jcenter()
-    }
-}
-
-task clean(type: Delete) {
-    delete rootProject.buildDir
-}
-'''
-
-write_file(root_build, clean_build_gradle)
-print("  ✓ Root build.gradle written (all required variables defined)")
+if os.path.exists(root_build):
+    content = read_file(root_build)
+    
+    # Only check, don't modify
+    has_rn_plugin = 'com.facebook.react' in content
+    has_plugins_dsl = 'plugins {' in content
+    
+    if has_rn_plugin or has_plugins_dsl:
+        print(f"  ⚠ Root build.gradle contains potential issues:")
+        if has_rn_plugin:
+            print("     - Contains com.facebook.react reference")
+        if has_plugins_dsl:
+            print("     - Contains plugins {} block")
+        print("  ℹ Preserving Expo prebuild output as-is")
+    else:
+        print("  ✓ Root build.gradle looks good (Expo standard)")
 
 print("\n[Step 3] Configure gradle.properties (clean overwrite)")
 props_path = "mobile/android/gradle.properties"
@@ -163,39 +122,19 @@ write_file(props_path, final_props.strip() + "\n")
 print("  ✓ gradle.properties written")
 
 print("\n=== Verification ===")
-root_content = read_file(root_build) or ""
-if 'ndkVersion = "25.1.8937393"' in root_content:
-    print("✓ ndkVersion defined!")
-if "compileSdkVersion = 34" in root_content:
-    print("✓ compileSdkVersion defined!")
-if "kotlinVersion = \"1.9.0\"" in root_content:
-    print("✓ kotlinVersion = \"1.9.0\" - Standard Expo version!")
-if "classpath 'com.android.tools.build:gradle:8.2.2'" in root_content:
-    print("✓ AGP 8.2.2 - CLEAN!")
-if 'plugins {' not in root_content:
-    print("✓ No plugins DSL block in root - COMPATIBLE!")
-if 'com.facebook.react' not in root_content:
-    print("✓ No React Native plugin in root - PURE EXPO!")
-
 app_content = read_file(app_build) or ""
 if 'com.facebook.react' not in app_content:
-    print("✓ No React Native plugin in app/build.gradle - EXPO COMPATIBLE!")
-if 'react {' not in app_content or 'react{' not in app_content:
-    print("✓ No react {} configuration block - CLEAN!")
-else:
-    print("⚠ WARNING: react {} block still found!")
-if "compileSdkVersion" in app_content:
-    print("✓ compileSdkVersion found in app/build.gradle!")
-else:
-    print("❌ ERROR: compileSdkVersion MISSING in app/build.gradle!")
+    print("✓ No com.facebook.react in app/build.gradle")
+if 'react-android' not in app_content:
+    print("✓ No react-android dependency in app/build.gradle")
+if 'react {' not in app_content and 'react{' not in app_content:
+    print("✓ No react {} block in app/build.gradle")
 if "hermesEnabled" in app_content:
-    print("✓ hermesEnabled defined")
+    print("✓ hermesEnabled defined in app/build.gradle")
 
 props_final = read_file(props_path) or ""
 if "hermesEnabled=true" in props_final:
     print("✓ gradle.properties OK")
 
-if '"""' not in root_content and "+ TARGET_KOTLIN" not in root_content:
-    print("✓ No garbage strings - FILES ARE CLEAN!")
-
 print("\n=== Fix script completed ===")
+print("ℹ Key principle: Preserve Expo prebuild output, only remove RN-specific code")

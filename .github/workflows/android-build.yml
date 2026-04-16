@@ -45,6 +45,16 @@ jobs:
         run: |
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
 
+      # ============================================================
+      # 🧹 COMPLETE CLEANUP & REBUILD (关键步骤)
+      # ============================================================
+      - name: 🔥 DELETE entire android directory (clean slate)
+        run: |
+          echo "=== 🔥 COMPLETE CLEANUP - Removing all Android files ==="
+          rm -rf mobile/android
+          echo "✓ mobile/android directory completely removed"
+          ls mobile/ | grep -v android || echo "(no android dir - clean)"
+
       - name: Generate Debug Keystore
         run: |
           keytool -genkeypair \
@@ -55,7 +65,7 @@ jobs:
             -keyalg RSA \
             -keysize 2048 \
             -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US"
+            -dname "CN=Android Debug,O=Android,C=US" || true
 
       - name: Generate missing asset files
         working-directory: mobile
@@ -72,12 +82,14 @@ jobs:
           echo "=== Assets ready ==="
           ls -la assets/
 
-      - name: Expo Prebuild - Generate Android Project
+      - name: Expo Prebuild --clean (FRESH GENERATION)
         working-directory: mobile
         run: |
-          echo "=== Running expo prebuild to generate native Android project ==="
+          echo "=== 🔄 Running expo prebuild --clean (FRESH) ==="
           npx expo prebuild --platform android --clean 2>&1 | tee prebuild.log
           echo "=== Prebuild finished ==="
+          echo "=== Generated files ==="
+          find android -name "*.gradle" -type f | head -20
 
       - name: Grant execute permission for Gradle
         run: chmod +x mobile/android/gradlew
@@ -85,44 +97,32 @@ jobs:
       - name: Run Android build fix script
         run: python3 scripts/fix-android-build.py
 
-      - name: Clean Android build cache
+      - name: Verify fix script output
+        run: |
+          echo "=== Checking build.gradle content ==="
+          cat mobile/android/build.gradle
+          echo ""
+          echo "=== Checking app/build.gradle for RN plugin ==="
+          grep -n "com.facebook.react" mobile/android/app/build.gradle && echo "❌ ERROR: RN plugin found!" || echo "✓ No RN plugin in app/build.gradle"
+          echo ""
+          echo "=== Checking root build.gradle for plugins DSL ==="
+          grep -n "plugins {" mobile/android/build.gradle && echo "⚠ Warning: plugins block found" || echo "✓ No plugins DSL in root build.gradle"
+
+      - name: Clean Gradle build cache (after fix)
         working-directory: mobile/android
         run: |
           echo "=== Cleaning Gradle build cache ==="
           ./gradlew clean --no-daemon 2>&1 | tail -5 || true
           ./gradlew cleanBuildCache --no-daemon 2>&1 | tail -5 || true
-          rm -rf .gradle build app/build
-          echo "✓ Gradle cache cleaned"
-          
-      - name: Clean node_modules and reinstall
-        working-directory: mobile
-        run: |
-          echo "=== Cleaning node_modules ==="
-          rm -rf node_modules package-lock.json 2>/dev/null || true
-          npm install --legacy-peer-deps 2>&1 | tail -10
-          echo "✓ Dependencies reinstalled"
+          rm -rf .gradle build app/build .cxx
+          echo "✓ All caches cleaned"
 
       - name: Verify gradle.properties format
         run: |
-          echo "=== Verifying gradle.properties ==="
+          echo "=== gradle.properties content ==="
           cat mobile/android/gradle.properties
           echo ""
-          echo "=== Checking for malformed lines ==="
-          grep -n "=" mobile/android/gradle.properties | while read line; do
-            key=$(echo "$line" | cut -d= -f1)
-            if echo "$key" | grep -q "[^a-zA-Z0-9._-]"; then
-              echo "⚠ WARNING: Possible malformed key in: $line"
-            fi
-          done
           echo "✓ Verification done"
-
-      - name: Verify configuration
-        run: |
-          echo "=== Checking configuration ==="
-          grep -rn "1\.9\.20\|8\.6\.0" mobile/android/ --include="*.gradle*" 2>/dev/null | head -5 || echo "No version refs found"
-          echo ""
-          echo "=== Kotlin compatibility block ==="
-          grep -A3 "jvmToolchain(17)" mobile/android/build.gradle 2>/dev/null || echo "Not found"
 
       - name: Build Debug APK
         working-directory: mobile/android
@@ -144,14 +144,14 @@ jobs:
 
       - name: Check and list all APK files
         run: |
-          echo "=== Checking for ALL APK files ==="
+          echo "=== ALL APK files ==="
           find mobile/android/app/build -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
           echo ""
-          echo "=== Debug APK directory ==="
-          ls -la mobile/android/app/build/outputs/apk/debug/ 2>/dev/null || echo "Debug directory not found"
+          echo "=== Debug APK ==="
+          ls -lah mobile/android/app/build/outputs/apk/debug/ 2>/dev/null || echo "Debug not found"
           echo ""
-          echo "=== Release APK directory ==="
-          ls -la mobile/android/app/build/outputs/apk/release/ 2>/dev/null || echo "Release directory not found"
+          echo "=== Release APK ==="
+          ls -lah mobile/android/app/build/outputs/apk/release/ 2>/dev/null || echo "Release not found"
 
       - name: Upload build logs (always)
         if: always()

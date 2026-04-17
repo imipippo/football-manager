@@ -155,20 +155,22 @@ print("\n[Step 4] Remove React Native plugin conflicts from app/build.gradle")
 if os.path.exists(app_build_path):
     content = read_file(app_build_path)
 
+    # Only remove plugin declarations, not dependencies
     lines_to_remove = [
-        'com.facebook.react',
-        'react-android',
+        'apply plugin.*react',
+        'id \'com.facebook.react\'',
+        'id(\'com.facebook.react\')',
     ]
 
     lines = content.split('\n')
     new_lines = []
     removed = 0
     for line in lines:
+        # Only remove plugin application lines, not implementation dependencies
         if any(pattern in line for pattern in lines_to_remove):
-            if 'apply plugin' in line or 'implementation' in line or 'id(' in line or 'id ' in line:
-                print(f"  Removed: {line.strip()}")
-                removed += 1
-                continue
+            print(f"  Removed: {line.strip()}")
+            removed += 1
+            continue
         new_lines.append(line)
 
     in_react_block = False
@@ -190,7 +192,7 @@ if os.path.exists(app_build_path):
 
     if removed > 0:
         write_file(app_build_path, '\n'.join(final_lines))
-        print(f"  Removed {removed} conflicting lines")
+        print(f"  Removed {removed} conflicting plugin lines")
 
     if "hermesEnabled" not in '\n'.join(final_lines):
         content = '\n'.join(final_lines)

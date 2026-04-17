@@ -229,7 +229,23 @@ if os.path.exists(root_build_path):
         subprojects_block = """
 
 subprojects {
-    project.plugins.withType(com.android.build.gradle.api.AndroidPlugin) {
+    plugins.withType('com.android.application') {
+        android {
+            kotlinOptions {
+                jvmTarget = '17'
+                freeCompilerArgs += [
+                    '-Xjvm-default=all',
+                    '-Xno-optimized-callable-references',
+                    '-Xno-call-assertions',
+                    '-Xno-param-assertions',
+                    '-Xno-strict-conditional-prepare-analyzer',
+                    '-Xno-new-inference'
+                ]
+            }
+        }
+    }
+    
+    plugins.withType('com.android.library') {
         android {
             kotlinOptions {
                 jvmTarget = '17'

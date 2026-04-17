@@ -201,7 +201,7 @@ if os.path.exists(app_build_path):
         print("  Added hermesEnabled definition")
 
 print("\n[Step 5] Force Kotlin version in expo-modules-core build.gradle")
-expo_modules = find_files(android_dir, ["**/expo-modules-core/**/build.gradle"])
+expo_modules = find_files("mobile", ["**/expo-modules-core/**/build.gradle"])
 print(f"  Found expo-modules-core build.gradle files: {expo_modules}")
 for filepath in expo_modules:
     content = read_file(filepath)
@@ -216,7 +216,7 @@ for filepath in expo_modules:
         print(f"  No kotlin found in: {filepath}")
 
 print("\n[Step 6] Force Kotlin version in react-native-gesture-handler build.gradle")
-gesture_files = find_files(android_dir, ["**/react-native-gesture-handler/**/build.gradle"])
+gesture_files = find_files("mobile", ["**/react-native-gesture-handler/**/build.gradle"])
 print(f"  Found react-native-gesture-handler build.gradle files: {gesture_files}")
 for filepath in gesture_files:
     content = read_file(filepath)
@@ -231,7 +231,7 @@ for filepath in gesture_files:
         print(f"  No kotlin found in: {filepath}")
 
 print("\n[Step 7] Force Kotlin version in ALL build.gradle files")
-all_gradle_files = find_files(android_dir, ["**/*.gradle"])
+all_gradle_files = find_files("mobile", ["**/*.gradle"])
 print(f"  Found {len(all_gradle_files)} gradle files total")
 for filepath in all_gradle_files:
     # Skip files we already processed

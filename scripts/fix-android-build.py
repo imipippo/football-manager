@@ -220,53 +220,22 @@ for filepath in all_gradle_files:
 
 print(f"\n  Total files fixed: {fixed_count}")
 
-print("\n[Step 6] Add subproject Kotlin configuration")
+print("\n[Step 6] Verify subprojects block uses correct syntax")
 root_build_path = os.path.join(android_dir, "build.gradle")
 if os.path.exists(root_build_path):
     content = read_file(root_build_path)
     
-    if "subprojects" not in content:
-        subprojects_block = """
-
-subprojects {
-    plugins.withType('com.android.application') {
-        android {
-            kotlinOptions {
-                jvmTarget = '17'
-                freeCompilerArgs += [
-                    '-Xjvm-default=all',
-                    '-Xno-optimized-callable-references',
-                    '-Xno-call-assertions',
-                    '-Xno-param-assertions',
-                    '-Xno-strict-conditional-prepare-analyzer',
-                    '-Xno-new-inference'
-                ]
-            }
-        }
-    }
-    
-    plugins.withType('com.android.library') {
-        android {
-            kotlinOptions {
-                jvmTarget = '17'
-                freeCompilerArgs += [
-                    '-Xjvm-default=all',
-                    '-Xno-optimized-callable-references',
-                    '-Xno-call-assertions',
-                    '-Xno-param-assertions',
-                    '-Xno-strict-conditional-prepare-analyzer',
-                    '-Xno-new-inference'
-                ]
-            }
-        }
-    }
-}
-"""
-        content = content + subprojects_block
-        write_file(root_build_path, content)
-        print("  Added subprojects block to root build.gradle")
-    else:
-        print("  subprojects block already exists")
+    if "subprojects" in content:
+        if "plugins.withType('com.android" in content or 'plugins.withType("com.android' in content:
+            content = re.sub(
+                r'subprojects\s*\{[\s\S]*?\}',
+                '',
+                content
+            )
+            write_file(root_build_path, content)
+            print("  Removed incorrect subprojects block with plugins.withType")
+        else:
+            print("  subprojects block uses correct hasPlugin syntax")
 
 print("\n=== Verification ===")
 root_build = read_file(os.path.join(android_dir, "build.gradle"))

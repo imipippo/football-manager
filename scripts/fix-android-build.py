@@ -119,13 +119,15 @@ if os.path.exists(app_build_path):
     content = read_file(app_build_path)
 
     if "freeCompilerArgs" not in content:
-        kotlin_options_block = """    kotlinOptions {
+        kotlin_options_block = """
+    kotlinOptions {
         jvmTarget = '17'
         freeCompilerArgs += [
             '-Xjvm-default=all',
             '-Xno-optimized-callable-references'
         ]
-    }"""
+    }
+"""
 
         if "kotlinOptions" in content:
             content = re.sub(
@@ -139,19 +141,10 @@ if os.path.exists(app_build_path):
             android_block_match = re.search(r'(android\s*\{)', content)
             if android_block_match:
                 insert_pos = android_block_match.end()
-                content = content[:insert_pos] + '\n' + kotlin_options_block + '\n' + content[insert_pos:]
+                content = content[:insert_pos] + kotlin_options_block + content[insert_pos:]
                 print("  Added kotlinOptions block inside android {}")
             else:
                 print("  WARNING: Could not find android {} block")
-
-    if "allWarningsAsErrors" not in content:
-        if "android {" in content:
-            content = content.replace(
-                "android {",
-                "android {\n    allWarningsAsErrors = false",
-                1
-            )
-            print("  Added allWarningsAsErrors = false")
 
     write_file(app_build_path, content)
     print(f"  {app_build_path} updated")
@@ -236,8 +229,6 @@ app_build = read_file(app_build_path)
 if app_build:
     if "freeCompilerArgs" in app_build:
         print("  freeCompilerArgs: PRESENT")
-    if "allWarningsAsErrors = false" in app_build:
-        print("  allWarningsAsErrors = false: PRESENT")
 
 props = read_file(props_path)
 if props:

@@ -4,7 +4,7 @@ import glob
 
 KOTLIN_VERSION = "1.9.25"
 
-print("=== Android Build Fix Script v2 ===")
+print("=== Android Build Fix Script v3 ===")
 print(f"Target Kotlin version: {KOTLIN_VERSION}")
 
 def read_file(path):
@@ -44,6 +44,48 @@ def replace_kotlin_version_in_content(content, filepath):
             changed = True
 
     return content, changed
+
+def add_kotlin_options_to_file(filepath):
+    content = read_file(filepath)
+    if not content:
+        return False
+    
+    kotlin_options_block = """
+    kotlinOptions {
+        jvmTarget = '17'
+        freeCompilerArgs += [
+            '-Xjvm-default=all',
+            '-Xno-optimized-callable-references',
+            '-Xno-call-assertions',
+            '-Xno-param-assertions',
+            '-Xno-strict-conditional-prepare-analyzer',
+            '-Xno-new-inference',
+            '-Xuse-old-backend',
+            '-Xskip-metadata-version-check'
+        ]
+    }
+"""
+    
+    if "kotlinOptions" in content:
+        content = re.sub(
+            r'kotlinOptions\s*\{[^}]*\}',
+            kotlin_options_block,
+            content,
+            flags=re.DOTALL
+        )
+        print(f"  Updated kotlinOptions block in {filepath}")
+    else:
+        android_block_match = re.search(r'(android\s*\{)', content)
+        if android_block_match:
+            insert_pos = android_block_match.end()
+            content = content[:insert_pos] + kotlin_options_block + content[insert_pos:]
+            print(f"  Added kotlinOptions block to {filepath}")
+        else:
+            print(f"  WARNING: Could not find android {} block in {filepath}")
+            return False
+    
+    write_file(filepath, content)
+    return True
 
 print("\n[Step 1] Fix Kotlin version in ALL Gradle files")
 android_dir = "mobile/android"
@@ -116,43 +158,7 @@ print(f"  gradle.properties written")
 print("\n[Step 3] Add Kotlin compiler options to app/build.gradle")
 app_build_path = os.path.join(android_dir, "app/build.gradle")
 if os.path.exists(app_build_path):
-    content = read_file(app_build_path)
-
-    kotlin_options_block = """
-    kotlinOptions {
-        jvmTarget = '17'
-        freeCompilerArgs += [
-            '-Xjvm-default=all',
-            '-Xno-optimized-callable-references',
-            '-Xno-call-assertions',
-            '-Xno-param-assertions',
-            '-Xno-strict-conditional-prepare-analyzer',
-            '-Xno-new-inference',
-            '-Xuse-old-backend',
-            '-Xskip-metadata-version-check'
-        ]
-    }
-"""
-
-    if "kotlinOptions" in content:
-        content = re.sub(
-            r'kotlinOptions\s*\{[^}]*\}',
-            kotlin_options_block,
-            content,
-            flags=re.DOTALL
-        )
-        print("  Updated kotlinOptions block with additional freeCompilerArgs")
-    else:
-        android_block_match = re.search(r'(android\s*\{)', content)
-        if android_block_match:
-            insert_pos = android_block_match.end()
-            content = content[:insert_pos] + kotlin_options_block + content[insert_pos:]
-            print("  Added kotlinOptions block inside android {}")
-        else:
-            print("  WARNING: Could not find android {} block")
-
-    write_file(app_build_path, content)
-    print(f"  {app_build_path} updated")
+    add_kotlin_options_to_file(app_build_path)
 else:
     print(f"  WARNING: {app_build_path} not found")
 
@@ -220,22 +226,35 @@ for filepath in all_gradle_files:
 
 print(f"\n  Total files fixed: {fixed_count}")
 
-print("\n[Step 6] Verify subprojects block uses correct syntax")
-root_build_path = os.path.join(android_dir, "build.gradle")
-if os.path.exists(root_build_path):
-    content = read_file(root_build_path)
-    
-    if "subprojects" in content:
-        if "plugins.withType('com.android" in content or 'plugins.withType("com.android' in content:
-            content = re.sub(
-                r'subprojects\s*\{[\s\S]*?\}',
-                '',
-                content
-            )
-            write_file(root_build_path, content)
-            print("  Removed incorrect subprojects block with plugins.withType")
-        else:
-            print("  subprojects block uses correct hasPlugin syntax")
+print("\n[Step 6] Add Kotlin compiler options to react-native-gesture-handler")
+gesture_files = find_files("mobile", ["**/react-native-gesture-handler/**/build.gradle"])
+print(f"  Found react-native-gesture-handler build.gradle files: {gesture_files}")
+for filepath in gesture_files:
+    if add_kotlin_options_to_file(filepath):
+        print(f"  Updated: {filepath}")
+
+print("\n[Step 7] Add Kotlin compiler options to expo-modules-core")
+expo_files = find_files("mobile", ["**/expo-modules-core/**/build.gradle"])
+print(f"  Found expo-modules-core build.gradle files: {expo_files}")
+for filepath in expo_files:
+    if add_kotlin_options_to_file(filepath):
+        print(f"  Updated: {filepath}")
+
+print("\n[Step 8] Add Kotlin compiler options to other Kotlin modules")
+other_kotlin_files = []
+for filepath in all_gradle_files:
+    if "react-native-gesture-handler" in filepath or "expo-modules-core" in filepath:
+        continue
+    if "app/build.gradle" in filepath:
+        continue
+    content = read_file(filepath)
+    if content and "kotlin" in content.lower() and "android" in content.lower():
+        other_kotlin_files.append(filepath)
+
+print(f"  Found other Kotlin modules: {len(other_kotlin_files)}")
+for filepath in other_kotlin_files:
+    if add_kotlin_options_to_file(filepath):
+        print(f"  Updated: {filepath}")
 
 print("\n=== Verification ===")
 root_build = read_file(os.path.join(android_dir, "build.gradle"))
@@ -247,7 +266,7 @@ if root_build:
 app_build = read_file(app_build_path)
 if app_build:
     if "freeCompilerArgs" in app_build:
-        print("  freeCompilerArgs: PRESENT")
+        print("  app/build.gradle: freeCompilerArgs: PRESENT")
 
 props = read_file(props_path)
 if props:

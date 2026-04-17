@@ -202,6 +202,7 @@ if os.path.exists(app_build_path):
 
 print("\n[Step 5] Force Kotlin version in expo-modules-core build.gradle")
 expo_modules = find_files(android_dir, ["**/expo-modules-core/**/build.gradle"])
+print(f"  Found expo-modules-core build.gradle files: {expo_modules}")
 for filepath in expo_modules:
     content = read_file(filepath)
     if content and "kotlin" in content.lower():
@@ -209,9 +210,14 @@ for filepath in expo_modules:
         if changed:
             write_file(filepath, new_content)
             print(f"  FIXED: {filepath}")
+        else:
+            print(f"  No change needed: {filepath}")
+    else:
+        print(f"  No kotlin found in: {filepath}")
 
 print("\n[Step 6] Force Kotlin version in react-native-gesture-handler build.gradle")
 gesture_files = find_files(android_dir, ["**/react-native-gesture-handler/**/build.gradle"])
+print(f"  Found react-native-gesture-handler build.gradle files: {gesture_files}")
 for filepath in gesture_files:
     content = read_file(filepath)
     if content and "kotlin" in content.lower():
@@ -219,6 +225,26 @@ for filepath in gesture_files:
         if changed:
             write_file(filepath, new_content)
             print(f"  FIXED: {filepath}")
+        else:
+            print(f"  No change needed: {filepath}")
+    else:
+        print(f"  No kotlin found in: {filepath}")
+
+print("\n[Step 7] Force Kotlin version in ALL build.gradle files")
+all_gradle_files = find_files(android_dir, ["**/*.gradle"])
+print(f"  Found {len(all_gradle_files)} gradle files total")
+for filepath in all_gradle_files:
+    # Skip files we already processed
+    if "expo-modules-core" in filepath or "react-native-gesture-handler" in filepath:
+        continue
+    content = read_file(filepath)
+    if content and "kotlin" in content.lower():
+        new_content, changed = replace_kotlin_version_in_content(content, filepath)
+        if changed:
+            write_file(filepath, new_content)
+            print(f"  FIXED: {filepath}")
+        else:
+            print(f"  No change needed: {filepath}")
 
 print("\n=== Verification ===")
 root_build = read_file(os.path.join(android_dir, "build.gradle"))

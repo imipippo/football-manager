@@ -4,7 +4,7 @@ import glob
 
 KOTLIN_VERSION = "1.9.25"
 
-print("=== Android Build Fix Script v4 ===")
+print("=== Android Build Fix Script v5 ===")
 print(f"Target Kotlin version: {KOTLIN_VERSION}")
 
 def read_file(path):
@@ -49,18 +49,17 @@ def replace_kotlin_version_in_content(content, filepath):
 
     return content, changed
 
-def add_kotlin_options_to_file(filepath):
+def add_kotlin_options_to_app_build(filepath):
     print(f"\n  Processing: {filepath}")
     content = read_file(filepath)
     if not content:
         print(f"  ERROR: File not found or empty")
         return False
-    
-    # Check if file contains android block
+
     if "android {" not in content:
         print(f"  WARNING: No android block found in file")
         return False
-    
+
     kotlin_options_block = """
     kotlinOptions {
         jvmTarget = '17'
@@ -70,16 +69,11 @@ def add_kotlin_options_to_file(filepath):
             '-Xno-call-assertions',
             '-Xno-param-assertions',
             '-Xno-strict-conditional-prepare-analyzer',
-            '-Xno-new-inference',
-            '-Xuse-old-backend',
-            '-Xskip-metadata-version-check',
-            '-Xallow-unreachable-code',
-            '-Xallow-unused-private-members',
-            '-Xskip-prerelease-check'
+            '-Xno-new-inference'
         ]
     }
 """
-    
+
     if "kotlinOptions" in content:
         content = re.sub(
             r'kotlinOptions\s*\{[^}]*\}',
@@ -97,31 +91,26 @@ def add_kotlin_options_to_file(filepath):
         else:
             print(f"  ERROR: Could not find android block")
             return False
-    
+
     write_file(filepath, content)
     print(f"  Saved changes to {filepath}")
     return True
 
-print("\n[Step 1] Fix Kotlin version in ALL Gradle files")
+print("\n[Step 1] Fix Kotlin version in root build.gradle")
 android_dir = "mobile/android"
-if os.path.exists(android_dir):
-    gradle_files = find_files(android_dir, ["**/*.gradle", "**/*.gradle.kts", "**/*.toml"])
-    for filepath in gradle_files:
-        content = read_file(filepath)
-        if content is None:
-            continue
-        if "kotlin" not in content.lower():
-            continue
-        new_content, changed = replace_kotlin_version_in_content(content, filepath)
-        if changed:
-            write_file(filepath, new_content)
-            print(f"  FIXED: {filepath}")
-        else:
-            print(f"  OK (no change needed): {filepath}")
+root_build_path = os.path.join(android_dir, "build.gradle")
+if os.path.exists(root_build_path):
+    content = read_file(root_build_path)
+    new_content, changed = replace_kotlin_version_in_content(content, root_build_path)
+    if changed:
+        write_file(root_build_path, new_content)
+        print(f"  FIXED: {root_build_path}")
+    else:
+        print(f"  OK (no change needed): {root_build_path}")
 else:
-    print(f"  ERROR: {android_dir} does not exist!")
+    print(f"  ERROR: {root_build_path} does not exist!")
 
-print("\n[Step 2] Fix gradle.properties with additional Kotlin options")
+print("\n[Step 2] Fix gradle.properties")
 props_path = os.path.join(android_dir, "gradle.properties")
 props_lines = []
 props_keys = set()
@@ -170,9 +159,9 @@ print(f"  gradle.properties written")
 print("\n[Step 3] Add Kotlin compiler options to app/build.gradle")
 app_build_path = os.path.join(android_dir, "app/build.gradle")
 if os.path.exists(app_build_path):
-    add_kotlin_options_to_file(app_build_path)
+    add_kotlin_options_to_app_build(app_build_path)
 else:
-    print(f"  WARNING: {app_build_path} not found")
+    print(f"  ERROR: {app_build_path} not found")
 
 print("\n[Step 4] Remove React Native plugin conflicts from app/build.gradle")
 if os.path.exists(app_build_path):
@@ -221,74 +210,30 @@ if os.path.exists(app_build_path):
         write_file(app_build_path, content)
         print("  Added hermesEnabled definition")
 
-print("\n[Step 5] Force Kotlin version in ALL modules")
-all_gradle_files = find_files("mobile", ["**/*.gradle"])
-print(f"  Found {len(all_gradle_files)} gradle files total")
-fixed_count = 0
-for filepath in all_gradle_files:
+print("\n[Step 5] Fix Kotlin version in settings.gradle")
+settings_path = os.path.join(android_dir, "settings.gradle")
+if os.path.exists(settings_path):
+    content = read_file(settings_path)
+    new_content, changed = replace_kotlin_version_in_content(content, settings_path)
+    if changed:
+        write_file(settings_path, new_content)
+        print(f"  FIXED: {settings_path}")
+    else:
+        print(f"  OK (no change needed): {settings_path}")
+else:
+    print(f"  WARNING: {settings_path} not found")
+
+print("\n[Step 6] Fix Kotlin version in gradle/libs.versions.toml")
+toml_files = find_files(android_dir, ["**/*.toml"])
+for filepath in toml_files:
     content = read_file(filepath)
     if content and "kotlin" in content.lower():
         new_content, changed = replace_kotlin_version_in_content(content, filepath)
         if changed:
             write_file(filepath, new_content)
             print(f"  FIXED: {filepath}")
-            fixed_count += 1
         else:
-            print(f"  No change needed: {filepath}")
-
-print(f"\n  Total files fixed: {fixed_count}")
-
-print("\n[Step 6] Add Kotlin compiler options to react-native-gesture-handler")
-gesture_files = find_files("mobile", ["**/react-native-gesture-handler/**/build.gradle"])
-gesture_files.extend(find_files("mobile", ["**/react-native-gesture-handler/**/build.gradle.kts"]))
-print(f"  Found react-native-gesture-handler build files: {len(gesture_files)}")
-for filepath in gesture_files:
-    if add_kotlin_options_to_file(filepath):
-        print(f"  Updated: {filepath}")
-
-print("\n[Step 7] Add Kotlin compiler options to expo-modules-core")
-expo_files = find_files("mobile", ["**/expo-modules-core/**/build.gradle"])
-expo_files.extend(find_files("mobile", ["**/expo-modules-core/**/build.gradle.kts"]))
-print(f"  Found expo-modules-core build files: {len(expo_files)}")
-for filepath in expo_files:
-    if add_kotlin_options_to_file(filepath):
-        print(f"  Updated: {filepath}")
-
-print("\n[Step 8] Add Kotlin compiler options to other Kotlin modules")
-other_kotlin_files = []
-for filepath in all_gradle_files:
-    if "react-native-gesture-handler" in filepath or "expo-modules-core" in filepath:
-        continue
-    if "app/build.gradle" in filepath:
-        continue
-    content = read_file(filepath)
-    if content and "kotlin" in content.lower() and "android" in content.lower():
-        other_kotlin_files.append(filepath)
-
-print(f"  Found other Kotlin modules: {len(other_kotlin_files)}")
-for filepath in other_kotlin_files:
-    if add_kotlin_options_to_file(filepath):
-        print(f"  Updated: {filepath}")
-
-print("\n[Step 9] Add project-wide Kotlin options in settings.gradle")
-settings_path = os.path.join(android_dir, "settings.gradle")
-if os.path.exists(settings_path):
-    content = read_file(settings_path)
-    if "pluginManagement" not in content:
-        plugin_management_block = """
-pluginManagement {
-    plugins {
-        id 'org.jetbrains.kotlin.android' version '$kotlinVersion' apply false
-    }
-}
-"""
-        content = plugin_management_block + '\n' + content
-        write_file(settings_path, content)
-        print(f"  Added pluginManagement block to settings.gradle")
-    else:
-        print(f"  pluginManagement block already exists in settings.gradle")
-else:
-    print(f"  WARNING: {settings_path} not found")
+            print(f"  OK (no change needed): {filepath}")
 
 print("\n=== Verification ===")
 root_build = read_file(os.path.join(android_dir, "build.gradle"))
@@ -301,6 +246,8 @@ app_build = read_file(app_build_path)
 if app_build:
     if "freeCompilerArgs" in app_build:
         print("  app/build.gradle: freeCompilerArgs: PRESENT")
+    if "kotlinOptions" in app_build:
+        print("  app/build.gradle: kotlinOptions: PRESENT")
 
 props = read_file(props_path)
 if props:

@@ -4,7 +4,7 @@ import glob
 
 KOTLIN_VERSION = "1.9.25"
 
-print("=== Android Build Fix Script v3 ===")
+print("=== Android Build Fix Script v4 ===")
 print(f"Target Kotlin version: {KOTLIN_VERSION}")
 
 def read_file(path):
@@ -20,7 +20,11 @@ def write_file(path, content):
 def find_files(base_dir, patterns):
     result = []
     for pattern in patterns:
-        result.extend(glob.glob(os.path.join(base_dir, pattern), recursive=True))
+        found = glob.glob(os.path.join(base_dir, pattern), recursive=True)
+        print(f"  Pattern '{pattern}' found: {len(found)} files")
+        for file in found:
+            print(f"    - {file}")
+        result.extend(found)
     return result
 
 def replace_kotlin_version_in_content(content, filepath):
@@ -46,8 +50,15 @@ def replace_kotlin_version_in_content(content, filepath):
     return content, changed
 
 def add_kotlin_options_to_file(filepath):
+    print(f"\n  Processing: {filepath}")
     content = read_file(filepath)
     if not content:
+        print(f"  ERROR: File not found or empty")
+        return False
+    
+    # Check if file contains android block
+    if "android {" not in content:
+        print(f"  WARNING: No android block found in file")
         return False
     
     kotlin_options_block = """
@@ -61,7 +72,10 @@ def add_kotlin_options_to_file(filepath):
             '-Xno-strict-conditional-prepare-analyzer',
             '-Xno-new-inference',
             '-Xuse-old-backend',
-            '-Xskip-metadata-version-check'
+            '-Xskip-metadata-version-check',
+            '-Xallow-unreachable-code',
+            '-Xallow-unused-private-members',
+            '-Xskip-prerelease-check'
         ]
     }
 """
@@ -73,18 +87,19 @@ def add_kotlin_options_to_file(filepath):
             content,
             flags=re.DOTALL
         )
-        print(f"  Updated kotlinOptions block in {filepath}")
+        print(f"  Updated existing kotlinOptions block")
     else:
         android_block_match = re.search(r'(android\s*\{)', content)
         if android_block_match:
             insert_pos = android_block_match.end()
             content = content[:insert_pos] + kotlin_options_block + content[insert_pos:]
-            print(f"  Added kotlinOptions block to {filepath}")
+            print(f"  Added kotlinOptions block")
         else:
-            print(f"  WARNING: Could not find android {} block in {filepath}")
+            print(f"  ERROR: Could not find android block")
             return False
     
     write_file(filepath, content)
+    print(f"  Saved changes to {filepath}")
     return True
 
 print("\n[Step 1] Fix Kotlin version in ALL Gradle files")
@@ -101,9 +116,6 @@ if os.path.exists(android_dir):
         if changed:
             write_file(filepath, new_content)
             print(f"  FIXED: {filepath}")
-            for i, (old, new) in enumerate(zip(content.split('\n'), new_content.split('\n'))):
-                if old != new:
-                    print(f"    Line {i+1}: {old.strip()} -> {new.strip()}")
         else:
             print(f"  OK (no change needed): {filepath}")
 else:
@@ -228,14 +240,16 @@ print(f"\n  Total files fixed: {fixed_count}")
 
 print("\n[Step 6] Add Kotlin compiler options to react-native-gesture-handler")
 gesture_files = find_files("mobile", ["**/react-native-gesture-handler/**/build.gradle"])
-print(f"  Found react-native-gesture-handler build.gradle files: {gesture_files}")
+gesture_files.extend(find_files("mobile", ["**/react-native-gesture-handler/**/build.gradle.kts"]))
+print(f"  Found react-native-gesture-handler build files: {len(gesture_files)}")
 for filepath in gesture_files:
     if add_kotlin_options_to_file(filepath):
         print(f"  Updated: {filepath}")
 
 print("\n[Step 7] Add Kotlin compiler options to expo-modules-core")
 expo_files = find_files("mobile", ["**/expo-modules-core/**/build.gradle"])
-print(f"  Found expo-modules-core build.gradle files: {expo_files}")
+expo_files.extend(find_files("mobile", ["**/expo-modules-core/**/build.gradle.kts"]))
+print(f"  Found expo-modules-core build files: {len(expo_files)}")
 for filepath in expo_files:
     if add_kotlin_options_to_file(filepath):
         print(f"  Updated: {filepath}")
@@ -255,6 +269,26 @@ print(f"  Found other Kotlin modules: {len(other_kotlin_files)}")
 for filepath in other_kotlin_files:
     if add_kotlin_options_to_file(filepath):
         print(f"  Updated: {filepath}")
+
+print("\n[Step 9] Add project-wide Kotlin options in settings.gradle")
+settings_path = os.path.join(android_dir, "settings.gradle")
+if os.path.exists(settings_path):
+    content = read_file(settings_path)
+    if "pluginManagement" not in content:
+        plugin_management_block = """
+pluginManagement {
+    plugins {
+        id 'org.jetbrains.kotlin.android' version '$kotlinVersion' apply false
+    }
+}
+"""
+        content = plugin_management_block + '\n' + content
+        write_file(settings_path, content)
+        print(f"  Added pluginManagement block to settings.gradle")
+    else:
+        print(f"  pluginManagement block already exists in settings.gradle")
+else:
+    print(f"  WARNING: {settings_path} not found")
 
 print("\n=== Verification ===")
 root_build = read_file(os.path.join(android_dir, "build.gradle"))

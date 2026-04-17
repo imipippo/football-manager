@@ -4,7 +4,7 @@ import glob
 
 KOTLIN_VERSION = "1.9.25"
 
-print("=== Android Build Fix Script v5 ===")
+print("=== Android Build Fix Script v6 ===")
 print(f"Target Kotlin version: {KOTLIN_VERSION}")
 
 def read_file(path):
@@ -49,7 +49,7 @@ def replace_kotlin_version_in_content(content, filepath):
 
     return content, changed
 
-def add_kotlin_options_to_app_build(filepath):
+def add_kotlin_options_to_file(filepath):
     print(f"\n  Processing: {filepath}")
     content = read_file(filepath)
     if not content:
@@ -95,6 +95,18 @@ def add_kotlin_options_to_app_build(filepath):
     write_file(filepath, content)
     print(f"  Saved changes to {filepath}")
     return True
+
+def fix_kotlin_version_in_module(module_name):
+    print(f"\n[Fixing {module_name}]")
+    module_files = find_files("mobile", [f"**/{module_name}/**/build.gradle"])
+    for filepath in module_files:
+        content = read_file(filepath)
+        if content:
+            new_content, changed = replace_kotlin_version_in_content(content, filepath)
+            if changed:
+                write_file(filepath, new_content)
+                print(f"  Updated Kotlin version in: {filepath}")
+            add_kotlin_options_to_file(filepath)
 
 print("\n[Step 1] Fix Kotlin version in root build.gradle")
 android_dir = "mobile/android"
@@ -159,7 +171,7 @@ print(f"  gradle.properties written")
 print("\n[Step 3] Add Kotlin compiler options to app/build.gradle")
 app_build_path = os.path.join(android_dir, "app/build.gradle")
 if os.path.exists(app_build_path):
-    add_kotlin_options_to_app_build(app_build_path)
+    add_kotlin_options_to_file(app_build_path)
 else:
     print(f"  ERROR: {app_build_path} not found")
 
@@ -234,6 +246,16 @@ for filepath in toml_files:
             print(f"  FIXED: {filepath}")
         else:
             print(f"  OK (no change needed): {filepath}")
+
+print("\n[Step 7] Fix expo-modules-core")
+fix_kotlin_version_in_module("expo-modules-core")
+
+print("\n[Step 8] Fix react-native-gesture-handler")
+fix_kotlin_version_in_module("react-native-gesture-handler")
+
+print("\n[Step 9] Fix react-native-async-storage")
+fix_kotlin_version_in_module("@react-native-async-storage")
+fix_kotlin_version_in_module("react-native-async-storage")
 
 print("\n=== Verification ===")
 root_build = read_file(os.path.join(android_dir, "build.gradle"))

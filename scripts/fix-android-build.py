@@ -67,7 +67,7 @@ if os.path.exists(android_dir):
 else:
     print(f"  ERROR: {android_dir} does not exist!")
 
-print("\n[Step 2] Fix gradle.properties")
+print("\n[Step 2] Fix gradle.properties with additional Kotlin options")
 props_path = os.path.join(android_dir, "gradle.properties")
 props_lines = []
 props_keys = set()
@@ -113,38 +113,43 @@ for key, value in required_props.items():
 write_file(props_path, '\n'.join(props_lines) + '\n')
 print(f"  gradle.properties written")
 
-print("\n[Step 3] Add Kotlin null-safety compiler options to app/build.gradle")
+print("\n[Step 3] Add Kotlin compiler options to app/build.gradle")
 app_build_path = os.path.join(android_dir, "app/build.gradle")
 if os.path.exists(app_build_path):
     content = read_file(app_build_path)
 
-    if "freeCompilerArgs" not in content:
-        kotlin_options_block = """
+    kotlin_options_block = """
     kotlinOptions {
         jvmTarget = '17'
         freeCompilerArgs += [
             '-Xjvm-default=all',
-            '-Xno-optimized-callable-references'
+            '-Xno-optimized-callable-references',
+            '-Xno-call-assertions',
+            '-Xno-param-assertions',
+            '-Xno-strict-conditional-prepare-analyzer',
+            '-Xno-new-inference',
+            '-Xuse-old-backend',
+            '-Xskip-metadata-version-check'
         ]
     }
 """
 
-        if "kotlinOptions" in content:
-            content = re.sub(
-                r'kotlinOptions\s*\{[^}]*\}',
-                kotlin_options_block,
-                content,
-                flags=re.DOTALL
-            )
-            print("  Updated existing kotlinOptions block with freeCompilerArgs")
+    if "kotlinOptions" in content:
+        content = re.sub(
+            r'kotlinOptions\s*\{[^}]*\}',
+            kotlin_options_block,
+            content,
+            flags=re.DOTALL
+        )
+        print("  Updated kotlinOptions block with additional freeCompilerArgs")
+    else:
+        android_block_match = re.search(r'(android\s*\{)', content)
+        if android_block_match:
+            insert_pos = android_block_match.end()
+            content = content[:insert_pos] + kotlin_options_block + content[insert_pos:]
+            print("  Added kotlinOptions block inside android {}")
         else:
-            android_block_match = re.search(r'(android\s*\{)', content)
-            if android_block_match:
-                insert_pos = android_block_match.end()
-                content = content[:insert_pos] + kotlin_options_block + content[insert_pos:]
-                print("  Added kotlinOptions block inside android {}")
-            else:
-                print("  WARNING: Could not find android {} block")
+            print("  WARNING: Could not find android {} block")
 
     write_file(app_build_path, content)
     print(f"  {app_build_path} updated")
@@ -155,7 +160,6 @@ print("\n[Step 4] Remove React Native plugin conflicts from app/build.gradle")
 if os.path.exists(app_build_path):
     content = read_file(app_build_path)
 
-    # Only remove plugin declarations, not dependencies
     lines_to_remove = [
         'apply plugin.*react',
         'id \'com.facebook.react\'',
@@ -166,7 +170,6 @@ if os.path.exists(app_build_path):
     new_lines = []
     removed = 0
     for line in lines:
-        # Only remove plugin application lines, not implementation dependencies
         if any(pattern in line for pattern in lines_to_remove):
             print(f"  Removed: {line.strip()}")
             removed += 1
@@ -200,51 +203,56 @@ if os.path.exists(app_build_path):
         write_file(app_build_path, content)
         print("  Added hermesEnabled definition")
 
-print("\n[Step 5] Force Kotlin version in expo-modules-core build.gradle")
-expo_modules = find_files("mobile", ["**/expo-modules-core/**/build.gradle"])
-print(f"  Found expo-modules-core build.gradle files: {expo_modules}")
-for filepath in expo_modules:
-    content = read_file(filepath)
-    if content and "kotlin" in content.lower():
-        new_content, changed = replace_kotlin_version_in_content(content, filepath)
-        if changed:
-            write_file(filepath, new_content)
-            print(f"  FIXED: {filepath}")
-        else:
-            print(f"  No change needed: {filepath}")
-    else:
-        print(f"  No kotlin found in: {filepath}")
-
-print("\n[Step 6] Force Kotlin version in react-native-gesture-handler build.gradle")
-gesture_files = find_files("mobile", ["**/react-native-gesture-handler/**/build.gradle"])
-print(f"  Found react-native-gesture-handler build.gradle files: {gesture_files}")
-for filepath in gesture_files:
-    content = read_file(filepath)
-    if content and "kotlin" in content.lower():
-        new_content, changed = replace_kotlin_version_in_content(content, filepath)
-        if changed:
-            write_file(filepath, new_content)
-            print(f"  FIXED: {filepath}")
-        else:
-            print(f"  No change needed: {filepath}")
-    else:
-        print(f"  No kotlin found in: {filepath}")
-
-print("\n[Step 7] Force Kotlin version in ALL build.gradle files")
+print("\n[Step 5] Force Kotlin version in ALL modules")
 all_gradle_files = find_files("mobile", ["**/*.gradle"])
 print(f"  Found {len(all_gradle_files)} gradle files total")
+fixed_count = 0
 for filepath in all_gradle_files:
-    # Skip files we already processed
-    if "expo-modules-core" in filepath or "react-native-gesture-handler" in filepath:
-        continue
     content = read_file(filepath)
     if content and "kotlin" in content.lower():
         new_content, changed = replace_kotlin_version_in_content(content, filepath)
         if changed:
             write_file(filepath, new_content)
             print(f"  FIXED: {filepath}")
+            fixed_count += 1
         else:
             print(f"  No change needed: {filepath}")
+
+print(f"\n  Total files fixed: {fixed_count}")
+
+print("\n[Step 6] Add subproject Kotlin configuration")
+root_build_path = os.path.join(android_dir, "build.gradle")
+if os.path.exists(root_build_path):
+    content = read_file(root_build_path)
+    
+    if "subprojects" not in content:
+        subprojects_block = """
+
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            project.android {
+                kotlinOptions {
+                    jvmTarget = '17'
+                    freeCompilerArgs += [
+                        '-Xjvm-default=all',
+                        '-Xno-optimized-callable-references',
+                        '-Xno-call-assertions',
+                        '-Xno-param-assertions',
+                        '-Xno-strict-conditional-prepare-analyzer',
+                        '-Xno-new-inference'
+                    ]
+                }
+            }
+        }
+    }
+}
+"""
+        content = content + subprojects_block
+        write_file(root_build_path, content)
+        print("  Added subprojects block to root build.gradle")
+    else:
+        print("  subprojects block already exists")
 
 print("\n=== Verification ===")
 root_build = read_file(os.path.join(android_dir, "build.gradle"))

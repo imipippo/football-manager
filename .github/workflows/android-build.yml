@@ -20,8 +20,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
-          cache-dependency-path: mobile/package-lock.json
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -39,54 +37,31 @@ jobs:
       - name: Step 1 - DELETE android directory
         working-directory: mobile
         run: |
-          echo "=== Step 1: Delete corrupted android directory ==="
           rm -rf android
-          echo "Done - android/ removed"
 
-      - name: Step 2 - Clean caches (keep package-lock.json!)
+      - name: Step 2 - Clean caches
         working-directory: mobile
         run: |
-          echo "=== Step 2: Clean caches ==="
           rm -rf node_modules
           npm cache clean --force
           rm -rf ~/.gradle/caches/
-          echo "=== Checking for package-lock.json ==="
-          if [ -f package-lock.json ]; then
-            echo "✓ package-lock.json exists"
-            ls -lh package-lock.json
-          else
-            echo "✗ package-lock.json NOT found - will use npm install"
-          fi
-          echo "Done - Caches cleaned"
 
-      - name: Step 3a - Install dependencies with legacy peer deps
+      - name: Step 3a - npm install
         working-directory: mobile
         run: |
-          echo "=== Step 3a: Install dependencies ==="
           npm install --legacy-peer-deps 2>&1 | tee npm-install.log
-          
-          echo "=== Verifying critical packages are installed ==="
           if [ ! -d node_modules/expo ]; then
-            echo "ERROR: expo module not found after npm install!"
+            echo "ERROR: expo module not found!"
             exit 1
           fi
-          if [ ! -d node_modules/react-native ]; then
-            echo "ERROR: react-native module not found!"
-            exit 1
-          fi
-          
           echo "=== Package versions ==="
           cat node_modules/expo/package.json | grep '"version"' | head -1
           cat node_modules/react-native/package.json | grep '"version"' | head -1
-          cat node_modules/react-native-gesture-handler/package.json | grep '"version"' | head -1
-          echo "✓ All critical packages verified"
 
-      - name: Step 3b - Run npx expo install to ensure Expo SDK compatibility
+      - name: Step 3b - npx expo install
         working-directory: mobile
         run: |
-          echo "=== Step 3b: npx expo install ==="
-          npx expo install 2>&1 | tee expo-install.log || echo "expo install completed (may have warnings)"
-          echo "Done - expo install finished"
+          npx expo install 2>&1 | tee expo-install.log || echo "expo install completed"
 
       - name: Generate missing asset files
         working-directory: mobile
@@ -99,28 +74,60 @@ jobs:
             fi
           done
 
-      - name: Step 4 - Expo Prebuild --clean
-        id: prebuild
+      - name: Step 4 - Expo Prebuild
         working-directory: mobile
         run: |
-          echo "=== Step 4: Expo prebuild --clean ==="
           npx expo prebuild --platform android --clean 2>&1 | tee prebuild.log
-          PREBUILD_EXIT=$?
-          echo "Prebuild exit code: $PREBUILD_EXIT"
-          
-          if [ $PREBUILD_EXIT -ne 0 ]; then
-            echo "ERROR: Expo prebuild failed!"
-            exit 1
-          fi
-          echo "=== Verifying android directory was created ==="
           if [ ! -d android ]; then
-            echo "ERROR: android directory was NOT created by prebuild!"
+            echo "ERROR: android directory NOT created!"
             exit 1
           fi
-          
-          echo "✓ android directory exists"
+          echo "=== Generated Gradle files ==="
           find android -name "*.gradle" -type f | head -10
-          echo "Done - Prebuild finished successfully"
+
+      - name: Step 5 - CRITICAL FIX: Force Kotlin 1.9.25 in ALL locations
+        run: |
+          echo "=== Step 5: Force Kotlin 1.9.25 ==="
+          
+          # Fix 1: gradle.properties
+          echo "kotlinVersion=1.9.25" >> mobile/android/gradle.properties
+          echo "hermesEnabled=true" >> mobile/android/gradle.properties
+          echo "android.useAndroidX=true" >> mobile/android/gradle.properties
+          echo "android.enableJetifier=true" >> mobile/android/gradle.properties
+          echo "org.gradle.jvmargs=-Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8" >> mobile/android/gradle.properties
+          echo "org.gradle.daemon=false" >> mobile/android/gradle.properties
+          echo "org.gradle.parallel=true" >> mobile/android/gradle.properties
+          echo "org.gradle.caching=true" >> mobile/android/gradle.properties
+          
+          # Fix 2: root build.gradle - replace ext.kotlinVersion
+          if [ -f mobile/android/build.gradle ]; then
+            echo "--- Before fix (root build.gradle) ---"
+            grep -n "kotlin" mobile/android/build.gradle | head -10 || echo "no kotlin found"
+            sed -i 's/ext\.kotlinVersion[[:space:]]*=.*/ext.kotlinVersion = "1.9.25"/' mobile/android/build.gradle
+            echo "--- After fix ---"
+            grep -n "kotlin" mobile/android/build.gradle | head -10 || echo "no kotlin found"
+          fi
+          
+          # Fix 3: settings.gradle - replace kotlin version in version catalog
+          if [ -f mobile/android/settings.gradle ]; then
+            echo "--- Before fix (settings.gradle) ---"
+            grep -n "kotlin" mobile/android/settings.gradle | head -10 || echo "no kotlin found"
+            sed -i 's/kotlin[[:space:]]*=[[:space:]]*"[^"]*"/kotlin = "1.9.25"/' mobile/android/settings.gradle
+            echo "--- After fix ---"
+            grep -n "kotlin" mobile/android/settings.gradle | head -10 || echo "no kotlin found"
+          fi
+          
+          # Fix 4: libs.versions.toml if exists
+          TOML_FILE=$(find mobile/android -name "libs.versions.toml" -type f 2>/dev/null | head -1)
+          if [ -n "$TOML_FILE" ]; then
+            echo "--- Before fix ($TOML_FILE) ---"
+            grep -n "kotlin" "$TOML_FILE" | head -10 || echo "no kotlin found"
+            sed -i 's/kotlin[[:space:]]*=[[:space:]]*"[^"]*"/kotlin = "1.9.25"/' "$TOML_FILE"
+            echo "--- After fix ---"
+            grep -n "kotlin" "$TOML_FILE" | head -10 || echo "no kotlin found"
+          fi
+          
+          echo "=== Kotlin version fix complete ==="
 
       - name: Generate Debug Keystore
         run: |
@@ -134,36 +141,10 @@ jobs:
             -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US" || true
 
-      - name: Configure gradle.properties with Kotlin 1.9.25
-        run: |
-          echo "=== Checking if android directory exists ==="
-          if [ ! -d mobile/android ]; then
-            echo "ERROR: mobile/android directory does not exist!"
-            exit 1
-          fi
-          
-          echo "android.useAndroidX=true" > mobile/android/gradle.properties
-          echo "android.enableJetifier=true" >> mobile/android/gradle.properties
-          echo "hermesEnabled=true" >> mobile/android/gradle.properties
-          echo "kotlin.version=1.9.25" >> mobile/android/gradle.properties
-          echo "org.gradle.jvmargs=-Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8" >> mobile/android/gradle.properties
-          echo "org.gradle.daemon=false" >> mobile/android/gradle.properties
-          echo "org.gradle.parallel=true" >> mobile/android/gradle.properties
-          echo "org.gradle.caching=true" >> mobile/android/gradle.properties
-          
-          echo "Done - gradle.properties configured with Kotlin 1.9.25"
-          cat mobile/android/gradle.properties
-
       - name: Grant execute permission
-        run: |
-          if [ ! -f mobile/android/gradlew ]; then
-            echo "ERROR: gradlew not found!"
-            exit 1
-          fi
-          chmod +x mobile/android/gradlew
-          echo "✓ gradlew permission granted"
+        run: chmod +x mobile/android/gradlew
 
-      - name: Step 5 - Build APKs
+      - name: Step 6 - Build APKs
         working-directory: mobile
         env:
           NODE_OPTIONS: --max-old-space-size=4096
@@ -181,13 +162,14 @@ jobs:
           echo "Release exit code: $RELEASE_EXIT"
           cd ..
           
-          if [ $DEBUG_EXIT -eq 0 ] && [ $RELEASE_EXIT -eq 0 ]; then
-            echo "SUCCESS: Both builds completed!"
-          else
-            echo "WARNING: Some builds failed"
+          if [ $DEBUG_EXIT -ne 0 ] || [ $RELEASE_EXIT -ne 0 ]; then
+            echo "BUILD FAILED - exiting with error"
+            exit 1
           fi
+          echo "SUCCESS: Both builds completed!"
 
       - name: List APK files
+        if: always()
         run: |
           echo "=== APK Files ==="
           find mobile/android/app/build -name "*.apk" -type f 2>/dev/null || echo "No APK found"

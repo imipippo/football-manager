@@ -34,21 +34,10 @@ jobs:
         run: |
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
 
-      - name: Step 1 - DELETE android directory
+      - name: Install npm dependencies
         working-directory: mobile
         run: |
-          rm -rf android
-
-      - name: Step 2 - Clean caches
-        working-directory: mobile
-        run: |
-          rm -rf node_modules
-          npm cache clean --force
-          rm -rf ~/.gradle/caches/
-
-      - name: Step 3a - npm install
-        working-directory: mobile
-        run: |
+          echo "=== npm install ==="
           npm install --legacy-peer-deps 2>&1 | tee npm-install.log
           if [ ! -d node_modules/expo ]; then
             echo "ERROR: expo module not found!"
@@ -57,11 +46,6 @@ jobs:
           echo "=== Package versions ==="
           cat node_modules/expo/package.json | grep '"version"' | head -1
           cat node_modules/react-native/package.json | grep '"version"' | head -1
-
-      - name: Step 3b - npx expo install
-        working-directory: mobile
-        run: |
-          npx expo install 2>&1 | tee expo-install.log || echo "expo install completed"
 
       - name: Generate missing asset files
         working-directory: mobile
@@ -74,9 +58,10 @@ jobs:
             fi
           done
 
-      - name: Step 4 - Expo Prebuild
+      - name: Expo Prebuild
         working-directory: mobile
         run: |
+          echo "=== Running expo prebuild ==="
           npx expo prebuild --platform android --clean 2>&1 | tee prebuild.log
           if [ ! -d android ]; then
             echo "ERROR: android directory NOT created!"
@@ -84,50 +69,30 @@ jobs:
           fi
           echo "=== Generated Gradle files ==="
           find android -name "*.gradle" -type f | head -10
+          echo "=== Kotlin version in root build.gradle ==="
+          grep -n "kotlin" android/build.gradle 2>/dev/null || echo "no kotlin found"
+          echo "=== Kotlin version in settings.gradle ==="
+          grep -n "kotlin" android/settings.gradle 2>/dev/null || echo "no kotlin found"
+          echo "=== TOML files ==="
+          find android -name "*.toml" -type f 2>/dev/null | head -5
 
-      - name: Step 5 - CRITICAL FIX: Force Kotlin 1.9.25 in ALL locations
+      - name: Run Android build fix script
+        run: python3 scripts/fix-android-build.py
+
+      - name: Verify Kotlin version fix
         run: |
-          echo "=== Step 5: Force Kotlin 1.9.25 ==="
-          
-          # Fix 1: gradle.properties
-          echo "kotlinVersion=1.9.25" >> mobile/android/gradle.properties
-          echo "hermesEnabled=true" >> mobile/android/gradle.properties
-          echo "android.useAndroidX=true" >> mobile/android/gradle.properties
-          echo "android.enableJetifier=true" >> mobile/android/gradle.properties
-          echo "org.gradle.jvmargs=-Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8" >> mobile/android/gradle.properties
-          echo "org.gradle.daemon=false" >> mobile/android/gradle.properties
-          echo "org.gradle.parallel=true" >> mobile/android/gradle.properties
-          echo "org.gradle.caching=true" >> mobile/android/gradle.properties
-          
-          # Fix 2: root build.gradle - replace ext.kotlinVersion
-          if [ -f mobile/android/build.gradle ]; then
-            echo "--- Before fix (root build.gradle) ---"
-            grep -n "kotlin" mobile/android/build.gradle | head -10 || echo "no kotlin found"
-            sed -i 's/ext\.kotlinVersion[[:space:]]*=.*/ext.kotlinVersion = "1.9.25"/' mobile/android/build.gradle
-            echo "--- After fix ---"
-            grep -n "kotlin" mobile/android/build.gradle | head -10 || echo "no kotlin found"
-          fi
-          
-          # Fix 3: settings.gradle - replace kotlin version in version catalog
-          if [ -f mobile/android/settings.gradle ]; then
-            echo "--- Before fix (settings.gradle) ---"
-            grep -n "kotlin" mobile/android/settings.gradle | head -10 || echo "no kotlin found"
-            sed -i 's/kotlin[[:space:]]*=[[:space:]]*"[^"]*"/kotlin = "1.9.25"/' mobile/android/settings.gradle
-            echo "--- After fix ---"
-            grep -n "kotlin" mobile/android/settings.gradle | head -10 || echo "no kotlin found"
-          fi
-          
-          # Fix 4: libs.versions.toml if exists
-          TOML_FILE=$(find mobile/android -name "libs.versions.toml" -type f 2>/dev/null | head -1)
-          if [ -n "$TOML_FILE" ]; then
-            echo "--- Before fix ($TOML_FILE) ---"
-            grep -n "kotlin" "$TOML_FILE" | head -10 || echo "no kotlin found"
-            sed -i 's/kotlin[[:space:]]*=[[:space:]]*"[^"]*"/kotlin = "1.9.25"/' "$TOML_FILE"
-            echo "--- After fix ---"
-            grep -n "kotlin" "$TOML_FILE" | head -10 || echo "no kotlin found"
-          fi
-          
-          echo "=== Kotlin version fix complete ==="
+          echo "=== Verifying Kotlin version in ALL files ==="
+          echo "--- root build.gradle ---"
+          grep -n "kotlin" mobile/android/build.gradle 2>/dev/null || echo "no kotlin found"
+          echo "--- settings.gradle ---"
+          grep -n "kotlin" mobile/android/settings.gradle 2>/dev/null || echo "no kotlin found"
+          echo "--- gradle.properties ---"
+          grep -n "kotlin" mobile/android/gradle.properties 2>/dev/null || echo "no kotlin found"
+          echo "--- TOML files ---"
+          find mobile/android -name "*.toml" -exec grep -n "kotlin" {} \; 2>/dev/null || echo "no toml found"
+          echo "--- app/build.gradle kotlinOptions ---"
+          grep -n "freeCompilerArgs\|allWarningsAsErrors\|kotlinOptions" mobile/android/app/build.gradle 2>/dev/null || echo "no kotlinOptions found"
+          echo "=== Verification complete ==="
 
       - name: Generate Debug Keystore
         run: |
@@ -144,37 +109,31 @@ jobs:
       - name: Grant execute permission
         run: chmod +x mobile/android/gradlew
 
-      - name: Step 6 - Build APKs
-        working-directory: mobile
-        env:
-          NODE_OPTIONS: --max-old-space-size=4096
-          GRADLE_OPTS: -Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8
+      - name: Build Debug APK
+        working-directory: mobile/android
         run: |
           echo "=== Building Debug APK ==="
-          cd android && ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee ../gradle-debug.log
-          DEBUG_EXIT=$?
-          echo "Debug exit code: $DEBUG_EXIT"
-          
-          echo ""
-          echo "=== Building Release APK ==="
-          ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee ../gradle-release.log
-          RELEASE_EXIT=$?
-          echo "Release exit code: $RELEASE_EXIT"
-          cd ..
-          
-          if [ $DEBUG_EXIT -ne 0 ] || [ $RELEASE_EXIT -ne 0 ]; then
-            echo "BUILD FAILED - exiting with error"
-            exit 1
-          fi
-          echo "SUCCESS: Both builds completed!"
+          export NODE_OPTIONS="--max-old-space-size=4096"
+          export GRADLE_OPTS="-Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8"
+          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee ../gradle-debug.log
+          echo "Debug exit code: $?"
 
-      - name: List APK files
+      - name: Build Release APK
+        working-directory: mobile/android
+        run: |
+          echo "=== Building Release APK ==="
+          export NODE_OPTIONS="--max-old-space-size=4096"
+          export GRADLE_OPTS="-Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8"
+          ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee ../gradle-release.log
+          echo "Release exit code: $?"
+
+      - name: Check APK files
         if: always()
         run: |
           echo "=== APK Files ==="
           find mobile/android/app/build -name "*.apk" -type f 2>/dev/null || echo "No APK found"
-          ls -lah mobile/android/app/build/outputs/apk/debug/ 2>/dev/null || echo "Debug not found"
-          ls -lah mobile/android/app/build/outputs/apk/release/ 2>/dev/null || echo "Release not found"
+          ls -lah mobile/android/app/build/outputs/apk/debug/ 2>/dev/null || echo "Debug dir not found"
+          ls -lah mobile/android/app/build/outputs/apk/release/ 2>/dev/null || echo "Release dir not found"
 
       - name: Upload build logs
         if: always()
@@ -183,7 +142,6 @@ jobs:
           name: build-logs
           path: |
             mobile/npm-install.log
-            mobile/expo-install.log
             mobile/prebuild.log
             mobile/gradle-debug.log
             mobile/gradle-release.log

@@ -27,19 +27,19 @@ def replace_kotlin_version_in_content(content, filepath):
     changed = False
 
     patterns = [
-        (r'(ext\.kotlinVersion\s*=\s*)"[^"]*"', r'\1"' + KOTLIN_VERSION + '"'),
-        (r'(kotlinVersion\s*=\s*)"[^"]*"', r'\1"' + KOTLIN_VERSION + '"'),
-        (r'(kotlin\s*=\s*)"[^"]*"', r'\1"' + KOTLIN_VERSION + '"'),
-        (r'(org\.jetbrains\.kotlin:kotlin-gradle-plugin:)([\d.]+)', r'\1' + KOTLIN_VERSION),
-        (r'(org\.jetbrains\.kotlin\.(?:android|jvm|multiplatform)\s*=\s*)"[^"]*"', r'\1"' + KOTLIN_VERSION + '"'),
-        (r'(kotlinAndroid\s*=\s*)"[^"]*"', r'\1"' + KOTLIN_VERSION + '"'),
+        (r'(ext\.kotlinVersion\s*=\s*)"[^"]*"', r'\g<1>"' + KOTLIN_VERSION + '"'),
+        (r'(kotlinVersion\s*=\s*)"[^"]*"', r'\g<1>"' + KOTLIN_VERSION + '"'),
+        (r'(kotlin\s*=\s*)"[^"]*"', r'\g<1>"' + KOTLIN_VERSION + '"'),
+        (r'(org\.jetbrains\.kotlin:kotlin-gradle-plugin:)([\d.]+)', r'\g<1>' + KOTLIN_VERSION),
+        (r'(org\.jetbrains\.kotlin\.(?:android|jvm|multiplatform)\s*=\s*)"[^"]*"', r'\g<1>"' + KOTLIN_VERSION + '"'),
+        (r'(kotlinAndroid\s*=\s*)"[^"]*"', r'\g<1>"' + KOTLIN_VERSION + '"'),
     ]
 
     for pattern, replacement in patterns:
         new_content = re.sub(pattern, replacement, content)
         if new_content != content:
             matches = re.findall(pattern, content)
-            print(f"  [{filepath}] Pattern '{pattern}' matched: {matches}")
+            print(f"  [{filepath}] Pattern matched")
             content = new_content
             changed = True
 

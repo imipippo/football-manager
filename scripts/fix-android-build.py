@@ -229,20 +229,18 @@ if os.path.exists(root_build_path):
         subprojects_block = """
 
 subprojects {
-    afterEvaluate { project ->
-        if (project.hasProperty('android')) {
-            project.android {
-                kotlinOptions {
-                    jvmTarget = '17'
-                    freeCompilerArgs += [
-                        '-Xjvm-default=all',
-                        '-Xno-optimized-callable-references',
-                        '-Xno-call-assertions',
-                        '-Xno-param-assertions',
-                        '-Xno-strict-conditional-prepare-analyzer',
-                        '-Xno-new-inference'
-                    ]
-                }
+    project.plugins.withType(com.android.build.gradle.api.AndroidPlugin) {
+        android {
+            kotlinOptions {
+                jvmTarget = '17'
+                freeCompilerArgs += [
+                    '-Xjvm-default=all',
+                    '-Xno-optimized-callable-references',
+                    '-Xno-call-assertions',
+                    '-Xno-param-assertions',
+                    '-Xno-strict-conditional-prepare-analyzer',
+                    '-Xno-new-inference'
+                ]
             }
         }
     }

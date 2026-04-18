@@ -92,6 +92,8 @@ jobs:
           find mobile/android -name "*.toml" -exec grep -n "kotlin" {} \; 2>/dev/null || echo "no toml found"
           echo "--- app/build.gradle kotlinOptions ---"
           grep -n "freeCompilerArgs\|allWarningsAsErrors\|kotlinOptions" mobile/android/app/build.gradle 2>/dev/null || echo "no kotlinOptions found"
+          echo "--- node_modules kotlinOptions check ---"
+          grep -rn "kotlinOptions" mobile/node_modules/@react-native-async-storage/async-storage/android/build.gradle 2>/dev/null && echo "ERROR: kotlinOptions found in async-storage!" || echo "OK: no kotlinOptions in async-storage"
           echo "=== Verification complete ==="
 
       - name: Generate Debug Keystore

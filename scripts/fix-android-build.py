@@ -4,7 +4,7 @@ import glob
 
 KOTLIN_VERSION = "1.9.25"
 
-print("=== Android Build Fix Script v6 ===")
+print("=== Android Build Fix Script v10 ===")
 print(f"Target Kotlin version: {KOTLIN_VERSION}")
 
 def read_file(path):
@@ -29,7 +29,6 @@ def find_files(base_dir, patterns):
 
 def replace_kotlin_version_in_content(content, filepath):
     changed = False
-
     patterns = [
         (r'(ext\.kotlinVersion\s*=\s*)"[^"]*"', r'\g<1>"' + KOTLIN_VERSION + '"'),
         (r'(kotlinVersion\s*=\s*)"[^"]*"', r'\g<1>"' + KOTLIN_VERSION + '"'),
@@ -38,75 +37,59 @@ def replace_kotlin_version_in_content(content, filepath):
         (r'(org\.jetbrains\.kotlin\.(?:android|jvm|multiplatform)\s*=\s*)"[^"]*"', r'\g<1>"' + KOTLIN_VERSION + '"'),
         (r'(kotlinAndroid\s*=\s*)"[^"]*"', r'\g<1>"' + KOTLIN_VERSION + '"'),
     ]
-
     for pattern, replacement in patterns:
         new_content = re.sub(pattern, replacement, content)
         if new_content != content:
-            matches = re.findall(pattern, content)
             print(f"  [{filepath}] Pattern matched")
             content = new_content
             changed = True
-
     return content, changed
 
-def add_kotlin_options_to_file(filepath):
-    print(f"\n  Processing: {filepath}")
+def remove_kotlin_options_blocks_from_file(filepath):
     content = read_file(filepath)
     if not content:
-        print(f"  ERROR: File not found or empty")
+        return False
+    if 'kotlinOptions' not in content and 'plugins.withId' not in content:
         return False
 
-    if "android {" not in content:
-        print(f"  WARNING: No android block found in file")
-        return False
+    original_content = content
+    lines = content.split('\n')
+    new_lines = []
+    skip_block = False
+    brace_count = 0
 
-    kotlin_options_block = """
-    kotlinOptions {
-        jvmTarget = '17'
-        freeCompilerArgs += [
-            '-Xjvm-default=all',
-            '-Xno-optimized-callable-references',
-            '-Xno-call-assertions',
-            '-Xno-param-assertions',
-            '-Xno-strict-conditional-prepare-analyzer',
-            '-Xno-new-inference'
-        ]
-    }
-"""
+    for line in lines:
+        stripped = line.strip()
 
-    if "kotlinOptions" in content:
-        content = re.sub(
-            r'kotlinOptions\s*\{[^}]*\}',
-            kotlin_options_block,
-            content,
-            flags=re.DOTALL
-        )
-        print(f"  Updated existing kotlinOptions block")
-    else:
-        android_block_match = re.search(r'(android\s*\{)', content)
-        if android_block_match:
-            insert_pos = android_block_match.end()
-            content = content[:insert_pos] + kotlin_options_block + content[insert_pos:]
-            print(f"  Added kotlinOptions block")
-        else:
-            print(f"  ERROR: Could not find android block")
-            return False
+        if skip_block:
+            brace_count += stripped.count('{') - stripped.count('}')
+            if brace_count <= 0:
+                skip_block = False
+            continue
 
-    write_file(filepath, content)
-    print(f"  Saved changes to {filepath}")
-    return True
+        if 'plugins.withId' in stripped and 'kotlin' in stripped.lower():
+            skip_block = True
+            brace_count = stripped.count('{') - stripped.count('}')
+            continue
 
-def fix_kotlin_version_in_module(module_name):
-    print(f"\n[Fixing {module_name}]")
-    module_files = find_files("mobile", [f"**/{module_name}/**/build.gradle"])
-    for filepath in module_files:
-        content = read_file(filepath)
-        if content:
-            new_content, changed = replace_kotlin_version_in_content(content, filepath)
-            if changed:
-                write_file(filepath, new_content)
-                print(f"  Updated Kotlin version in: {filepath}")
-            add_kotlin_options_to_file(filepath)
+        if 'if' in stripped and 'plugins.hasPlugin' in stripped and 'kotlin' in stripped.lower():
+            skip_block = True
+            brace_count = stripped.count('{') - stripped.count('}')
+            continue
+
+        if 'kotlinOptions' in stripped and '{' in stripped:
+            skip_block = True
+            brace_count = stripped.count('{') - stripped.count('}')
+            continue
+
+        new_lines.append(line)
+
+    content = '\n'.join(new_lines)
+    if content != original_content:
+        write_file(filepath, content)
+        print(f"  Removed kotlinOptions blocks from {filepath}")
+        return True
+    return False
 
 print("\n[Step 1] Fix Kotlin version in root build.gradle")
 android_dir = "mobile/android"
@@ -168,23 +151,61 @@ for key, value in required_props.items():
 write_file(props_path, '\n'.join(props_lines) + '\n')
 print(f"  gradle.properties written")
 
-print("\n[Step 3] Add Kotlin compiler options to app/build.gradle")
+print("\n[Step 3] Fix kotlinOptions in app/build.gradle ONLY")
 app_build_path = os.path.join(android_dir, "app/build.gradle")
 if os.path.exists(app_build_path):
-    add_kotlin_options_to_file(app_build_path)
+    content = read_file(app_build_path)
+    if 'kotlinOptions' in content:
+        new_content = re.sub(
+            r'kotlinOptions\s*\{[^}]*\}',
+            """kotlinOptions {
+            jvmTarget = '17'
+            freeCompilerArgs += [
+                '-Xjvm-default=all',
+                '-Xno-optimized-callable-references',
+                '-Xno-call-assertions',
+                '-Xno-param-assertions',
+                '-Xno-strict-conditional-prepare-analyzer',
+                '-Xno-new-inference'
+            ]
+        }""",
+            content,
+            flags=re.DOTALL
+        )
+        if new_content != content:
+            write_file(app_build_path, new_content)
+            print(f"  Updated kotlinOptions in app/build.gradle")
+    else:
+        android_match = re.search(r'(android\s*\{)', content)
+        if android_match:
+            insert_pos = android_match.end()
+            kotlin_options = """
+        kotlinOptions {
+            jvmTarget = '17'
+            freeCompilerArgs += [
+                '-Xjvm-default=all',
+                '-Xno-optimized-callable-references',
+                '-Xno-call-assertions',
+                '-Xno-param-assertions',
+                '-Xno-strict-conditional-prepare-analyzer',
+                '-Xno-new-inference'
+            ]
+        }
+"""
+            content = content[:insert_pos] + kotlin_options + content[insert_pos:]
+            write_file(app_build_path, content)
+            print(f"  Added kotlinOptions to app/build.gradle")
 else:
     print(f"  ERROR: {app_build_path} not found")
 
 print("\n[Step 4] Remove React Native plugin conflicts from app/build.gradle")
 if os.path.exists(app_build_path):
     content = read_file(app_build_path)
-
     lines_to_remove = [
         'apply plugin.*react',
         'id \'com.facebook.react\'',
         'id(\'com.facebook.react\')',
     ]
-
     lines = content.split('\n')
     new_lines = []
     removed = 0
@@ -247,15 +268,19 @@ for filepath in toml_files:
         else:
             print(f"  OK (no change needed): {filepath}")
 
-print("\n[Step 7] Fix expo-modules-core")
-fix_kotlin_version_in_module("expo-modules-core")
+print("\n[Step 7] Fix Kotlin version in node_modules (version only, NO kotlinOptions)")
+node_modules_gradle_files = find_files("mobile", ["**/node_modules/**/build.gradle"])
+for filepath in node_modules_gradle_files:
+    content = read_file(filepath)
+    if content:
+        new_content, changed = replace_kotlin_version_in_content(content, filepath)
+        if changed:
+            write_file(filepath, new_content)
+            print(f"  Updated Kotlin version in: {filepath}")
 
-print("\n[Step 8] Fix react-native-gesture-handler")
-fix_kotlin_version_in_module("react-native-gesture-handler")
-
-print("\n[Step 9] Fix react-native-async-storage")
-fix_kotlin_version_in_module("@react-native-async-storage")
-fix_kotlin_version_in_module("react-native-async-storage")
+print("\n[Step 8] Remove any kotlinOptions blocks from node_modules (cleanup)")
+for filepath in node_modules_gradle_files:
+    remove_kotlin_options_blocks_from_file(filepath)
 
 print("\n=== Verification ===")
 root_build = read_file(os.path.join(android_dir, "build.gradle"))
@@ -276,5 +301,15 @@ if props:
     for line in props.split('\n'):
         if 'kotlin' in line.lower():
             print(f"  gradle.properties: {line.strip()}")
+
+print("\n  Checking node_modules for remaining kotlinOptions...")
+found_kotlin_options = False
+for filepath in node_modules_gradle_files:
+    content = read_file(filepath)
+    if content and 'kotlinOptions' in content:
+        print(f"  WARNING: kotlinOptions still in {filepath}")
+        found_kotlin_options = True
+if not found_kotlin_options:
+    print("  OK: No kotlinOptions in node_modules")
 
 print("\n=== Fix script completed ===")

@@ -46,6 +46,7 @@ jobs:
           echo "=== Package versions ==="
           cat node_modules/expo/package.json | grep '"version"' | head -1
           cat node_modules/react-native/package.json | grep '"version"' | head -1
+          cat node_modules/expo-modules-core/package.json | grep '"version"' | head -1
 
       - name: Generate missing asset files
         working-directory: mobile
@@ -67,19 +68,30 @@ jobs:
         working-directory: mobile
         run: |
           echo "=== Running expo prebuild ==="
-          npx expo prebuild --platform android 2>&1 | tee prebuild.log
+          npx expo prebuild --platform android --clean 2>&1 | tee prebuild.log
           if [ ! -d android ]; then
             echo "ERROR: android directory NOT created!"
             exit 1
           fi
           echo "=== Generated Gradle files ==="
           find android -name "*.gradle" -type f | head -10
+          echo "=== MainActivity.kt content ==="
+          cat android/app/src/main/java/com/footballmanager/app/MainActivity.kt 2>/dev/null || echo "MainActivity.kt not found"
+          echo "=== MainApplication.kt content ==="
+          cat android/app/src/main/java/com/footballmanager/app/MainApplication.kt 2>/dev/null || echo "MainApplication.kt not found"
           echo "=== Kotlin version in root build.gradle ==="
           grep -n "kotlin" android/build.gradle 2>/dev/null || echo "no kotlin found"
           echo "=== Kotlin version in settings.gradle ==="
           grep -n "kotlin" android/settings.gradle 2>/dev/null || echo "no kotlin found"
           echo "=== TOML files ==="
           find android -name "*.toml" -type f 2>/dev/null | head -5
+          echo "=== Checking expo-modules-core ==="
+          if [ -d "node_modules/expo-modules-core/android" ]; then
+            echo "expo-modules-core/android exists"
+            ls -la node_modules/expo-modules-core/android/ | head -10
+          else
+            echo "ERROR: expo-modules-core/android NOT FOUND!"
+          fi
 
       - name: Run Android build fix script
         run: python3 scripts/fix-android-build.py

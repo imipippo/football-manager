@@ -74,6 +74,12 @@ jobs:
           fi
           echo "=== Generated Gradle files ==="
           find android -name "*.gradle" -type f | head -10
+          echo "=== Kotlin version in root build.gradle ==="
+          grep -n "kotlin" android/build.gradle 2>/dev/null || echo "no kotlin found"
+          echo "=== Kotlin version in settings.gradle ==="
+          grep -n "kotlin" android/settings.gradle 2>/dev/null || echo "no kotlin found"
+          echo "=== TOML files ==="
+          find android -name "*.toml" -type f 2>/dev/null | head -5
 
       - name: Run Android build fix script
         run: python3 scripts/fix-android-build.py
@@ -84,8 +90,20 @@ jobs:
 
       - name: Verify Kotlin version fix
         run: |
-          echo "=== Verifying Kotlin version ==="
+          echo "=== Verifying Kotlin version in ALL files ==="
+          echo "--- root build.gradle ---"
           grep -n "kotlin" mobile/android/build.gradle 2>/dev/null || echo "no kotlin found"
+          echo "--- settings.gradle ---"
+          grep -n "kotlin" mobile/android/settings.gradle 2>/dev/null || echo "no kotlin found"
+          echo "--- gradle.properties ---"
+          grep -n "kotlin" mobile/android/gradle.properties 2>/dev/null || echo "no kotlin found"
+          echo "--- TOML files ---"
+          find mobile/android -name "*.toml" -exec grep -n "kotlin" {} \; 2>/dev/null || echo "no toml found"
+          echo "--- app/build.gradle kotlinOptions ---"
+          grep -n "freeCompilerArgs\|allWarningsAsErrors\|kotlinOptions" mobile/android/app/build.gradle 2>/dev/null || echo "no kotlinOptions found"
+          echo "--- node_modules kotlinOptions check ---"
+          grep -rn "kotlinOptions" mobile/node_modules/@react-native-async-storage/async-storage/android/build.gradle 2>/dev/null && echo "ERROR: kotlinOptions found in async-storage!" || echo "OK: no kotlinOptions in async-storage"
+          echo "=== Verification complete ==="
 
       - name: Generate Debug Keystore
         run: |
@@ -118,18 +136,66 @@ jobs:
         run: |
           echo "=== Building Debug APK ==="
           export NODE_OPTIONS="--max-old-space-size=4096"
-          export GRADLE_OPTS="-Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8"
-          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee ../gradle-debug.log
-          echo "Debug exit code: $?"
+          export GRADLE_OPTS="-Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8 -Dorg.gradle.internal.http.connectionTimeout=60000 -Dorg.gradle.internal.http.socketTimeout=60000"
+          ./gradlew assembleDebug --no-daemon --stacktrace --no-build-cache 2>&1 | tee ../gradle-debug.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "Debug exit code: $EXIT_CODE"
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "DEBUG BUILD FAILED!"
+            exit 1
+          fi
+
+      - name: Build Release APK
+        working-directory: mobile/android
+        run: |
+          echo "=== Building Release APK ==="
+          export NODE_OPTIONS="--max-old-space-size=4096"
+          export GRADLE_OPTS="-Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8 -Dorg.gradle.internal.http.connectionTimeout=60000 -Dorg.gradle.internal.http.socketTimeout=60000"
+          ./gradlew assembleRelease --no-daemon --stacktrace --no-build-cache 2>&1 | tee ../gradle-release.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "Release exit code: $EXIT_CODE"
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "RELEASE BUILD FAILED!"
+            exit 1
+          fi
 
       - name: Check APK files
         run: |
-          find mobile/android/app/build -name "*.apk" -type f 2>/dev/null || echo "No APK found"
+          echo "=== APK Files ==="
+          DEBUG_APK=$(find mobile/android/app/build -name "*.apk" -type f 2>/dev/null | head -1)
+          if [ -z "$DEBUG_APK" ]; then
+            echo "ERROR: No APK file found!"
+            echo "Available files in build directory:"
+            ls -la mobile/android/app/build/outputs/apk/debug/ 2>/dev/null || echo "Debug dir not found"
+            ls -la mobile/android/app/build/outputs/apk/release/ 2>/dev/null || echo "Release dir not found"
+            exit 1
+          fi
+          echo "Found APK: $DEBUG_APK"
+          ls -lah mobile/android/app/build/outputs/apk/debug/ 2>/dev/null || echo "Debug dir not found"
+          ls -lah mobile/android/app/build/outputs/apk/release/ 2>/dev/null || echo "Release dir not found"
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            mobile/npm-install.log
+            mobile/prebuild.log
+            mobile/gradle-debug.log
+            mobile/gradle-release.log
+          retention-days: 7
 
       - name: Upload Debug APK
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: debug-apk
           path: mobile/android/app/build/outputs/apk/debug/*.apk
           retention-days: 30
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: mobile/android/app/build/outputs/apk/release/*.apk
+          retention-days: 90

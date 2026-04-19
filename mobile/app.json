@@ -1,1 +1,34 @@
-{"expo": {"name": "足球经理", "slug": "football-manager", "version": "1.0.0", "orientation": "portrait", "userInterfaceStyle": "dark", "assetBundlePatterns": ["**/*"], "ios": {"supportsTablet": true, "bundleIdentifier": "com.footballmanager.app"}, "android": {"package": "com.footballmanager.app", "kotlinVersion": "2.0.21"}, "web": {"bundler": "metro", "output": "static"}, "extra": {"apiUrl": "http://localhost:3001/api/v1"}}}
+{
+  "expo": {
+    "name": "足球经理",
+    "slug": "football-manager",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.footballmanager.app"
+    },
+    "android": {
+      "package": "com.footballmanager.app"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "2.0.21"
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "apiUrl": "http://localhost:3001/api/v1"
+    }
+  }
+}

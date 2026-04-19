@@ -278,6 +278,20 @@ for filepath in node_modules_gradle_files:
             write_file(filepath, new_content)
             print(f"  Updated Kotlin version in: {filepath}")
 
+print("\n[Step 7b] Fix Kotlin default fallback in ExpoModulesCorePlugin.gradle")
+expo_plugin_files = find_files("mobile", ["**/node_modules/expo-modules-core/**/*.gradle"])
+for filepath in expo_plugin_files:
+    content = read_file(filepath)
+    if content:
+        new_content = re.sub(
+            r'(\?\s*")1\.9\.24(")',
+            r'\g<1>' + KOTLIN_VERSION + r'\g<2>',
+            content
+        )
+        if new_content != content:
+            write_file(filepath, new_content)
+            print(f"  Updated Kotlin default in: {filepath}")
+
 print("\n[Step 8] Remove any kotlinOptions blocks from node_modules (cleanup)")
 for filepath in node_modules_gradle_files:
     remove_kotlin_options_blocks_from_file(filepath)

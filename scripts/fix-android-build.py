@@ -2,7 +2,7 @@ import os
 import re
 import glob
 
-KOTLIN_VERSION = "1.9.25"
+KOTLIN_VERSION = "1.9.24"
 
 print("=== Android Build Fix Script v10 ===")
 print(f"Target Kotlin version: {KOTLIN_VERSION}")
@@ -284,7 +284,7 @@ for filepath in expo_plugin_files:
     content = read_file(filepath)
     if content:
         new_content = re.sub(
-            r'(\?\s*")1\.9\.24(")',
+            r'(\?\s*")1\.9\.2[45](")',
             r'\g<1>' + KOTLIN_VERSION + r'\g<2>',
             content
         )

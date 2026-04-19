@@ -82,7 +82,9 @@ jobs:
           echo "=== Kotlin version in root build.gradle ==="
           grep -n "kotlin" android/build.gradle 2>/dev/null || echo "no kotlin found"
           echo "=== Kotlin version in settings.gradle ==="
-          grep -n "kotlin" android/settings.gradle 2>/dev/null || echo "no kotlin found"
+          grep -n "kotlin\|expo" android/settings.gradle 2>/dev/null || echo "no kotlin/expo found"
+          echo "=== settings.gradle full content ==="
+          cat android/settings.gradle
           echo "=== TOML files ==="
           find android -name "*.toml" -type f 2>/dev/null | head -5
           echo "=== Checking expo-modules-core ==="

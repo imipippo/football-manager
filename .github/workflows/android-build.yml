@@ -46,7 +46,6 @@ jobs:
           echo "=== Package versions ==="
           cat node_modules/expo/package.json | grep '"version"' | head -1
           cat node_modules/react-native/package.json | grep '"version"' | head -1
-          cat node_modules/expo-modules-core/package.json | grep '"version"' | head -1
 
       - name: Generate missing asset files
         working-directory: mobile
@@ -86,6 +85,9 @@ jobs:
           echo "=== settings.gradle full content ==="
           cat android/settings.gradle
           echo "=== END of settings.gradle ==="
+          echo "=== gradle.properties content ==="
+          cat android/gradle.properties
+          echo "=== END of gradle.properties ==="
           echo "=== TOML files ==="
           find android -name "*.toml" -type f 2>/dev/null | head -5
           echo "=== Checking expo-modules-core ==="
@@ -94,6 +96,13 @@ jobs:
             ls -la node_modules/expo-modules-core/android/ | head -10
           else
             echo "ERROR: expo-modules-core/android NOT FOUND!"
+          fi
+          echo "=== Checking expo-build-properties ==="
+          if [ -d "node_modules/expo-build-properties" ]; then
+            echo "expo-build-properties exists"
+            cat node_modules/expo-build-properties/package.json | grep '"version"' | head -1
+          else
+            echo "ERROR: expo-build-properties NOT FOUND!"
           fi
 
       - name: Run Android build fix script
@@ -131,17 +140,6 @@ jobs:
             -keysize 2048 \
             -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US" || true
-
-      # NOTE: Disabled Gradle cache to prevent restoring old android directory from cache
-      # - name: Cache Gradle
-      #   uses: actions/cache@v4
-      #   with:
-      #     path: |
-      #       ~/.gradle/caches
-      #       ~/.gradle/wrapper
-      #     key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-      #     restore-keys: |
-      #       ${{ runner.os }}-gradle-
 
       - name: Grant execute permission
         run: chmod +x mobile/android/gradlew
@@ -202,15 +200,19 @@ jobs:
           retention-days: 7
 
       - name: Upload Debug APK
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: debug-apk
           path: mobile/android/app/build/outputs/apk/debug/*.apk
           retention-days: 30
+          if-no-files-found: warn
 
       - name: Upload Release APK
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: release-apk
           path: mobile/android/app/build/outputs/apk/release/*.apk
           retention-days: 90
+          if-no-files-found: warn

@@ -5,9 +5,8 @@ import glob
 KOTLIN_VERSION = "2.0.21"
 COMPOSE_COMPILER_VERSION = "1.5.15"
 
-print("=== Android Build Fix Script v13 ===")
+print("=== Android Build Fix Script v14 ===")
 print(f"Target Kotlin version: {KOTLIN_VERSION}")
-print(f"Target Compose Compiler version: {COMPOSE_COMPILER_VERSION}")
 
 def read_file(path):
     if os.path.exists(path):
@@ -98,6 +97,7 @@ android_dir = "mobile/android"
 root_build_path = os.path.join(android_dir, "build.gradle")
 if os.path.exists(root_build_path):
     content = read_file(root_build_path)
+    print(f"  Content preview (first 500 chars): {content[:500] if content else 'None'}")
     new_content, changed = replace_kotlin_version_in_content(content, root_build_path)
     if changed:
         write_file(root_build_path, new_content)
@@ -107,13 +107,17 @@ if os.path.exists(root_build_path):
 else:
     print(f"  ERROR: {root_build_path} does not exist!")
 
-print("\n[Step 2] Fix gradle.properties")
+print("\n[Step 2] Fix gradle.properties - FORCE Kotlin version")
 props_path = os.path.join(android_dir, "gradle.properties")
 props_lines = []
 props_keys = set()
 
 if os.path.exists(props_path):
     existing = read_file(props_path)
+    print(f"  Existing gradle.properties content:")
+    for line in existing.split('\n'):
+        if 'kotlin' in line.lower() or 'hermes' in line.lower():
+            print(f"    {line}")
     for line in existing.split('\n'):
         stripped = line.strip()
         if '=' in stripped and not stripped.startswith('#'):
@@ -250,6 +254,9 @@ print("\n[Step 5] Fix Kotlin version in settings.gradle")
 settings_path = os.path.join(android_dir, "settings.gradle")
 if os.path.exists(settings_path):
     content = read_file(settings_path)
+    print(f"  settings.gradle content preview:")
+    for line in content.split('\n')[:20]:
+        print(f"    {line}")
     new_content, changed = replace_kotlin_version_in_content(content, settings_path)
     if changed:
         write_file(settings_path, new_content)
@@ -264,6 +271,9 @@ toml_files = find_files(android_dir, ["**/*.toml"])
 for filepath in toml_files:
     content = read_file(filepath)
     if content and "kotlin" in content.lower():
+        print(f"  TOML file {filepath} content preview:")
+        for line in content.split('\n')[:10]:
+            print(f"    {line}")
         new_content, changed = replace_kotlin_version_in_content(content, filepath)
         if changed:
             write_file(filepath, new_content)
@@ -281,23 +291,24 @@ for filepath in node_modules_gradle_files:
             write_file(filepath, new_content)
             print(f"  Updated Kotlin version in: {filepath}")
 
-print("\n[Step 7b] Fix Kotlin version in ExpoModulesCore")
-expo_plugin_files = find_files("mobile", ["**/node_modules/expo-modules-core/**/*.gradle"])
-for filepath in expo_plugin_files:
+print("\n[Step 7b] Fix Kotlin version in ExpoModulesCore and other Expo modules")
+expo_gradle_files = find_files("mobile", ["**/node_modules/expo*/**/*.gradle"])
+for filepath in expo_gradle_files:
     content = read_file(filepath)
     if content:
-        # Fix Kotlin default fallback
+        new_content = content
+        if 'kotlin' in content.lower():
+            new_content, changed = replace_kotlin_version_in_content(content, filepath)
+            if changed:
+                content = new_content
         new_content = re.sub(
-            r'(\?\s*")1\.9\.2[45](")',
+            r'(\?\s*")[\d.]+(")',
             r'\g<1>' + KOTLIN_VERSION + r'\g<2>',
             content
         )
-        # Fix Compose compiler mapping for Kotlin 2.0.21
-        if KOTLIN_VERSION == "2.0.21":
-            new_content = new_content.replace('"2.0.21": "1.5.14"', '"2.0.21": "1.5.15"')
         if new_content != content:
             write_file(filepath, new_content)
-            print(f"  Updated ExpoModulesCore in: {filepath}")
+            print(f"  Updated Expo module in: {filepath}")
 
 print("\n[Step 8] Remove any kotlinOptions blocks from node_modules (cleanup)")
 for filepath in node_modules_gradle_files:
@@ -323,7 +334,6 @@ if props:
         if 'kotlin' in line.lower():
             print(f"  gradle.properties: {line.strip()}")
 
-# Check for any remaining kotlinOptions in node_modules
 print("\n  Checking node_modules for remaining kotlinOptions...")
 found_kotlin_options = False
 for filepath in node_modules_gradle_files:

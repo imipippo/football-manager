@@ -79,6 +79,10 @@ jobs:
       - name: Run Android build fix script
         run: python3 scripts/fix-android-build.py
 
+      - name: Clean Gradle
+        working-directory: mobile/android
+        run: ./gradlew clean --no-daemon
+
       - name: Verify Kotlin version fix
         run: |
           echo "=== Verifying Kotlin version in ALL files ==="

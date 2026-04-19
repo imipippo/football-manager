@@ -2,7 +2,7 @@ import os
 import re
 import glob
 
-KOTLIN_VERSION = "1.9.25"
+KOTLIN_VERSION = "1.9.24"
 
 print("=== Android Build Fix Script v10 ===")
 print(f"Target Kotlin version: {KOTLIN_VERSION}")
@@ -278,7 +278,7 @@ for filepath in node_modules_gradle_files:
             write_file(filepath, new_content)
             print(f"  Updated Kotlin version in: {filepath}")
 
-print("\n[Step 7b] Fix Kotlin version and Compose compiler in ExpoModulesCore")
+print("\n[Step 7b] Fix Kotlin version in ExpoModulesCore")
 expo_plugin_files = find_files("mobile", ["**/node_modules/expo-modules-core/**/*.gradle"])
 for filepath in expo_plugin_files:
     content = read_file(filepath)
@@ -288,7 +288,8 @@ for filepath in expo_plugin_files:
             r'\g<1>' + KOTLIN_VERSION + r'\g<2>',
             content
         )
-        new_content = new_content.replace('"1.9.25": "1.5.15"', '"1.9.25": "1.5.14"')
+        if KOTLIN_VERSION == "1.9.24":
+            new_content = new_content.replace('"1.9.24": "1.5.15"', '"1.9.24": "1.5.14"')
         if new_content != content:
             write_file(filepath, new_content)
             print(f"  Updated ExpoModulesCore in: {filepath}")

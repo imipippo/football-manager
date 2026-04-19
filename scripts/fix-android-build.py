@@ -4,7 +4,7 @@ import glob
 
 KOTLIN_VERSION = "1.9.24"
 
-print("=== Android Build Fix Script v10 ===")
+print("=== Android Build Fix Script v11 ===")
 print(f"Target Kotlin version: {KOTLIN_VERSION}")
 
 def read_file(path):
@@ -120,6 +120,7 @@ if os.path.exists(props_path):
         props_lines.append(line)
 
 required_props = {
+    "android.kotlinVersion": KOTLIN_VERSION,
     "kotlinVersion": KOTLIN_VERSION,
     "hermesEnabled": "true",
     "android.useAndroidX": "true",
@@ -203,8 +204,8 @@ if os.path.exists(app_build_path):
     content = read_file(app_build_path)
     lines_to_remove = [
         'apply plugin.*react',
-        'id \'com.facebook.react\'',
-        'id(\'com.facebook.react\')',
+        "id 'com.facebook.react'",
+        "id('com.facebook.react')",
     ]
     lines = content.split('\n')
     new_lines = []
@@ -283,11 +284,13 @@ expo_plugin_files = find_files("mobile", ["**/node_modules/expo-modules-core/**/
 for filepath in expo_plugin_files:
     content = read_file(filepath)
     if content:
+        # Fix Kotlin default fallback
         new_content = re.sub(
             r'(\?\s*")1\.9\.2[45](")',
             r'\g<1>' + KOTLIN_VERSION + r'\g<2>',
             content
         )
+        # Restore Compose compiler mapping for Kotlin 1.9.24 (should be 1.5.14)
         if KOTLIN_VERSION == "1.9.24":
             new_content = new_content.replace('"1.9.24": "1.5.15"', '"1.9.24": "1.5.14"')
         if new_content != content:
@@ -318,6 +321,7 @@ if props:
         if 'kotlin' in line.lower():
             print(f"  gradle.properties: {line.strip()}")
 
+# Check for any remaining kotlinOptions in node_modules
 print("\n  Checking node_modules for remaining kotlinOptions...")
 found_kotlin_options = False
 for filepath in node_modules_gradle_files:

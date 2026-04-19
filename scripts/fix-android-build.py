@@ -2,10 +2,12 @@ import os
 import re
 import glob
 
-KOTLIN_VERSION = "1.9.24"
+KOTLIN_VERSION = "1.9.25"
+COMPOSE_COMPILER_VERSION = "1.5.15"
 
-print("=== Android Build Fix Script v11 ===")
+print("=== Android Build Fix Script v12 ===")
 print(f"Target Kotlin version: {KOTLIN_VERSION}")
+print(f"Target Compose Compiler version: {COMPOSE_COMPILER_VERSION}")
 
 def read_file(path):
     if os.path.exists(path):
@@ -290,8 +292,9 @@ for filepath in expo_plugin_files:
             r'\g<1>' + KOTLIN_VERSION + r'\g<2>',
             content
         )
-        # Restore Compose compiler mapping for Kotlin 1.9.24 (should be 1.5.14)
-        if KOTLIN_VERSION == "1.9.24":
+        # Fix Compose compiler mapping for Kotlin 1.9.25 -> 1.5.15
+        if KOTLIN_VERSION == "1.9.25":
+            new_content = new_content.replace('"1.9.25": "1.5.14"', '"1.9.25": "1.5.15"')
             new_content = new_content.replace('"1.9.24": "1.5.15"', '"1.9.24": "1.5.14"')
         if new_content != content:
             write_file(filepath, new_content)

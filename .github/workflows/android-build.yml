@@ -141,6 +141,34 @@ jobs:
             -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US" || true
 
+      - name: Pre-build Diagnostics
+        working-directory: mobile/android
+        run: |
+          echo "=== Pre-build Diagnostics ==="
+          echo "=== Java Version ==="
+          java -version
+          echo ""
+          echo "=== Gradle Wrapper Version ==="
+          ./gradlew --version || echo "Cannot get Gradle version"
+          echo ""
+          echo "=== Root build.gradle ==="
+          cat build.gradle
+          echo ""
+          echo "=== App build.gradle ==="
+          cat app/build.gradle
+          echo ""
+          echo "=== gradle-wrapper.properties ==="
+          cat gradle/wrapper/gradle-wrapper.properties
+          echo ""
+          echo "=== gradle.properties ==="
+          cat gradle.properties
+          echo ""
+          echo "=== Android Directory Structure ==="
+          find . -type f -name "*.gradle" | head -20
+          echo ""
+          echo "=== Node Modules Check ==="
+          ls -la ../node_modules/react-native/android/com/facebook/react/react-native/ 2>/dev/null || echo "No react-native android artifacts"
+
       - name: Build Debug APK
         working-directory: mobile/android
         run: |
@@ -165,8 +193,8 @@ jobs:
             echo "=== DIAGNOSTIC: gradle.properties ==="
             cat gradle.properties 2>/dev/null || echo "Cannot read gradle.properties"
             echo ""
-            echo "=== DIAGNOSTIC: Last 100 lines of gradle-debug.log ==="
-            tail -100 ../gradle-debug.log 2>/dev/null || echo "Cannot read gradle-debug.log"
+            echo "=== DIAGNOSTIC: Last 200 lines of gradle-debug.log ==="
+            tail -200 ../gradle-debug.log 2>/dev/null || echo "Cannot read gradle-debug.log"
             exit 1
           fi
 

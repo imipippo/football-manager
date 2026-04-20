@@ -1,12 +1,4 @@
 // Expo SDK 53 / React Native 0.79 compatibility - CI version
-ext {
-    buildToolsVersion = "35.0.0"
-    minSdkVersion = 24
-    compileSdkVersion = 35
-    targetSdkVersion = 35
-    kotlinVersion = "2.0.21"
-    ndkVersion = "27.1.12297006"
-}
 
 buildscript {
     ext {
@@ -24,6 +16,8 @@ buildscript {
     dependencies {
         classpath("com.android.tools.build:gradle:8.5.0")
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21")
+        // React Native Gradle Plugin
+        classpath("com.facebook.react:react-native-gradle-plugin")
     }
 }
 

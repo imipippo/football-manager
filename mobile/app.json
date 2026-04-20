@@ -17,16 +17,6 @@
       "bundler": "metro",
       "output": "static"
     },
-    "plugins": [
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "kotlinVersion": "2.0.21"
-          }
-        }
-      ]
-    ],
     "extra": {
       "apiUrl": "http://localhost:3001/api/v1"
     }

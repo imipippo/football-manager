@@ -66,7 +66,7 @@ jobs:
       - name: Expo Prebuild
         working-directory: mobile
         run: |
-          echo "=== Running expo prebuild ==="
+          echo "=== Running expo prebuild (Expo SDK 53) ==="
           npx expo prebuild --platform android --clean 2>&1 | tee prebuild.log
           if [ ! -d android ]; then
             echo "ERROR: android directory NOT created!"
@@ -74,36 +74,8 @@ jobs:
           fi
           echo "=== Generated Gradle files ==="
           find android -name "*.gradle" -type f | head -10
-          echo "=== MainActivity.kt content ==="
-          cat android/app/src/main/java/com/footballmanager/app/MainActivity.kt 2>/dev/null || echo "MainActivity.kt not found"
-          echo "=== MainApplication.kt content ==="
-          cat android/app/src/main/java/com/footballmanager/app/MainApplication.kt 2>/dev/null || echo "MainApplication.kt not found"
           echo "=== Kotlin version in root build.gradle ==="
           grep -n "kotlin" android/build.gradle 2>/dev/null || echo "no kotlin found"
-          echo "=== Kotlin version in settings.gradle ==="
-          grep -n "kotlin\|expo" android/settings.gradle 2>/dev/null || echo "no kotlin/expo found"
-          echo "=== settings.gradle full content ==="
-          cat android/settings.gradle
-          echo "=== END of settings.gradle ==="
-          echo "=== gradle.properties content ==="
-          cat android/gradle.properties
-          echo "=== END of gradle.properties ==="
-          echo "=== TOML files ==="
-          find android -name "*.toml" -type f 2>/dev/null | head -5
-          echo "=== Checking expo-modules-core ==="
-          if [ -d "node_modules/expo-modules-core/android" ]; then
-            echo "expo-modules-core/android exists"
-            ls -la node_modules/expo-modules-core/android/ | head -10
-          else
-            echo "ERROR: expo-modules-core/android NOT FOUND!"
-          fi
-          echo "=== Checking expo-build-properties ==="
-          if [ -d "node_modules/expo-build-properties" ]; then
-            echo "expo-build-properties exists"
-            cat node_modules/expo-build-properties/package.json | grep '"version"' | head -1
-          else
-            echo "ERROR: expo-build-properties NOT FOUND!"
-          fi
 
       - name: Run Android build fix script
         run: python3 scripts/fix-android-build.py
@@ -112,21 +84,13 @@ jobs:
         working-directory: mobile/android
         run: ./gradlew clean --no-daemon
 
-      - name: Verify Kotlin version fix
+      - name: Verify build configuration
         run: |
-          echo "=== Verifying Kotlin version in ALL files ==="
-          echo "--- root build.gradle ---"
+          echo "=== Verifying build configuration (Expo SDK 53) ==="
+          echo "--- Kotlin version in root build.gradle ---"
           grep -n "kotlin" mobile/android/build.gradle 2>/dev/null || echo "no kotlin found"
-          echo "--- settings.gradle ---"
-          grep -n "kotlin" mobile/android/settings.gradle 2>/dev/null || echo "no kotlin found"
           echo "--- gradle.properties ---"
-          grep -n "kotlin" mobile/android/gradle.properties 2>/dev/null || echo "no kotlin found"
-          echo "--- TOML files ---"
-          find mobile/android -name "*.toml" -exec grep -n "kotlin" {} \; 2>/dev/null || echo "no toml found"
-          echo "--- app/build.gradle kotlinOptions ---"
-          grep -n "freeCompilerArgs\|allWarningsAsErrors\|kotlinOptions" mobile/android/app/build.gradle 2>/dev/null || echo "no kotlinOptions found"
-          echo "--- node_modules kotlinOptions check ---"
-          grep -rn "kotlinOptions" mobile/node_modules/@react-native-async-storage/async-storage/android/build.gradle 2>/dev/null && echo "ERROR: kotlinOptions found in async-storage!" || echo "OK: no kotlinOptions in async-storage"
+          grep -n "kotlin\|org.gradle" mobile/android/gradle.properties 2>/dev/null || echo "no relevant properties found"
           echo "=== Verification complete ==="
 
       - name: Generate Debug Keystore

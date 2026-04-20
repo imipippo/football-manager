@@ -69,34 +69,39 @@ jobs:
 
       - name: Clean android directory
         run: |
+          echo "=== Removing mobile/android directory ==="
           rm -rf mobile/android
-          echo "Removed old android directory"
+          ls -la mobile/ | grep android || echo "android directory removed successfully"
 
       - name: Expo Prebuild
         working-directory: mobile
         run: |
           set -o pipefail
+          echo "=== Current directory contents ==="
+          ls -la
+          echo "=== app.json contents ==="
+          cat app.json
           echo "=== Running expo prebuild (Expo SDK 53) ==="
           npx expo prebuild --platform android --clean 2>&1 | tee prebuild.log
           PREBUILD_EXIT=${PIPESTATUS[0]}
           echo "Expo prebuild exit code: $PREBUILD_EXIT"
           if [ $PREBUILD_EXIT -ne 0 ]; then
             echo "ERROR: expo prebuild failed with exit code $PREBUILD_EXIT!"
-            echo "=== Last 100 lines of prebuild log ==="
-            tail -100 prebuild.log
+            echo "=== Full prebuild log ==="
+            cat prebuild.log
             exit 1
           fi
           if [ ! -d android ]; then
             echo "ERROR: android directory NOT created!"
-            echo "=== Last 100 lines of prebuild log ==="
-            tail -100 prebuild.log
+            echo "=== Full prebuild log ==="
+            cat prebuild.log
             exit 1
           fi
           echo "=== Prebuild succeeded! ==="
-          echo "=== Generated Gradle files ==="
-          find android -name "*.gradle" -type f | head -10
-          echo "=== Kotlin version in root build.gradle ==="
-          grep -n "kotlin" android/build.gradle 2>/dev/null || echo "no kotlin found"
+          echo "=== Generated Android directory structure ==="
+          find android -type f | head -20
+          echo "=== Generated build.gradle ==="
+          cat android/build.gradle
 
       - name: Run Android build fix script
         run: python3 scripts/fix-android-build.py
@@ -107,13 +112,11 @@ jobs:
       - name: Verify android directory
         run: |
           echo "=== Checking android directory ==="
-          ls -la mobile/android/ 2>/dev/null || echo "android directory not found"
+          ls -la mobile/android/
           echo "=== Checking gradlew ==="
-          ls -la mobile/android/gradlew 2>/dev/null || echo "gradlew not found"
+          ls -la mobile/android/gradlew
           echo "=== Checking build.gradle ==="
-          ls -la mobile/android/build.gradle 2>/dev/null || echo "build.gradle not found"
-          echo "=== Checking settings.gradle ==="
-          ls -la mobile/android/settings.gradle 2>/dev/null || echo "settings.gradle not found"
+          head -50 mobile/android/build.gradle
 
       - name: Clean Gradle
         working-directory: mobile/android
@@ -127,7 +130,7 @@ jobs:
           echo "--- Kotlin version in root build.gradle ---"
           grep -n "kotlin" mobile/android/build.gradle 2>/dev/null || echo "no kotlin found"
           echo "--- gradle.properties ---"
-          grep -n "kotlin\|org.gradle" mobile/android/gradle.properties 2>/dev/null || echo "no relevant properties found"
+          cat mobile/android/gradle.properties
           echo "=== Verification complete ==="
 
       - name: Generate Debug Keystore

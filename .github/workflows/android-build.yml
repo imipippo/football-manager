@@ -61,45 +61,47 @@ jobs:
             fi
           done
 
-      - name: Clean android directory
+      - name: Check android directory
         run: |
-          rm -rf mobile/android
-          echo "Removed old android directory"
+          echo "=== Checking android directory ==="
+          if [ -d "mobile/android" ]; then
+            echo "Android directory exists"
+            ls -la mobile/android/
+          else
+            echo "Android directory does not exist, need to generate"
+          fi
 
-      - name: Expo Prebuild
+      - name: Expo Prebuild (if needed)
         working-directory: mobile
         run: |
-          set -o pipefail
-          echo "=== Running expo prebuild (Expo SDK 53) ==="
-          npx expo prebuild --platform android --clean 2>&1 | tee prebuild.log
-          PREBUILD_EXIT=${PIPESTATUS[0]}
-          echo "Expo prebuild exit code: $PREBUILD_EXIT"
-          if [ $PREBUILD_EXIT -ne 0 ]; then
-            echo "ERROR: expo prebuild failed with exit code $PREBUILD_EXIT!"
-            echo "=== Last 50 lines of prebuild log ==="
-            tail -50 prebuild.log
-            exit 1
+          if [ ! -d "android" ]; then
+            set -o pipefail
+            echo "=== Running expo prebuild (Expo SDK 53) ==="
+            npx expo prebuild --platform android --clean 2>&1 | tee prebuild.log
+            PREBUILD_EXIT=${PIPESTATUS[0]}
+            echo "Expo prebuild exit code: $PREBUILD_EXIT"
+            if [ $PREBUILD_EXIT -ne 0 ]; then
+              echo "ERROR: expo prebuild failed with exit code $PREBUILD_EXIT!"
+              echo "=== Last 50 lines of prebuild log ==="
+              tail -50 prebuild.log
+              exit 1
+            fi
+            if [ ! -d android ]; then
+              echo "ERROR: android directory NOT created!"
+              echo "=== Last 50 lines of prebuild log ==="
+              tail -50 prebuild.log
+              exit 1
+            fi
+            echo "=== Prebuild succeeded! ==="
+          else
+            echo "Android directory already exists, skipping prebuild"
           fi
-          if [ ! -d android ]; then
-            echo "ERROR: android directory NOT created!"
-            echo "=== Last 50 lines of prebuild log ==="
-            tail -50 prebuild.log
-            exit 1
-          fi
-          echo "=== Prebuild succeeded! ==="
-          echo "=== Generated Gradle files ==="
-          find android -name "*.gradle" -type f | head -10
-          echo "=== Kotlin version in root build.gradle ==="
-          grep -n "kotlin" android/build.gradle 2>/dev/null || echo "no kotlin found"
 
       - name: Fix build.gradle for SDK 53
         working-directory: mobile
         run: |
           echo "=== Fixing build.gradle for Expo SDK 53 ==="
-          echo "=== Current directory: $(pwd) ==="
-          echo "=== Listing files ==="
-          ls -la
-          # Check if CI version exists (outside android directory to survive clean)
+          # Always use the CI version
           if [ -f "android-build.gradle.ci" ]; then
             echo "Using pre-generated CI build.gradle from mobile directory"
             cp android-build.gradle.ci android/build.gradle
@@ -107,7 +109,7 @@ jobs:
             echo "Using pre-generated CI build.gradle from android dir"
             cp android/build.gradle.ci android/build.gradle
           else
-            echo "CI build.gradle not found, using sed to fix"
+            echo "WARNING: CI build.gradle not found, using existing or sed to fix"
             # Backup original
             cp android/build.gradle android/build.gradle.bak
             # Use sed to replace kotlin version - handle various formats

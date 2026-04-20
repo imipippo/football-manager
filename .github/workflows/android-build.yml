@@ -118,10 +118,19 @@ jobs:
       - name: Verify build configuration
         run: |
           echo "=== Verifying build configuration (Expo SDK 53) ==="
-          echo "--- Kotlin version in root build.gradle ---"
-          grep -n "kotlin" mobile/android/build.gradle 2>/dev/null || echo "no kotlin found"
+          echo ""
+          echo "--- Full root build.gradle ---"
+          cat mobile/android/build.gradle 2>/dev/null || echo "ERROR: Cannot read root build.gradle"
+          echo ""
+          echo "--- gradle-wrapper.properties ---"
+          cat mobile/android/gradle/wrapper/gradle-wrapper.properties 2>/dev/null || echo "ERROR: Cannot read gradle-wrapper.properties"
+          echo ""
           echo "--- gradle.properties ---"
-          grep -n "kotlin\|org.gradle" mobile/android/gradle.properties 2>/dev/null || echo "no relevant properties found"
+          cat mobile/android/gradle.properties 2>/dev/null || echo "ERROR: Cannot read gradle.properties"
+          echo ""
+          echo "--- app/build.gradle (first 50 lines) ---"
+          head -50 mobile/android/app/build.gradle 2>/dev/null || echo "ERROR: Cannot read app/build.gradle"
+          echo ""
           echo "=== Verification complete ==="
 
       - name: Generate Debug Keystore

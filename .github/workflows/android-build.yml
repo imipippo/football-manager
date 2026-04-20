@@ -131,11 +131,11 @@ jobs:
       - name: Fix Gradle version
         working-directory: mobile/android
         run: |
-          echo "=== Fixing Gradle version to 8.9 ==="
+          echo "=== Fixing Gradle version to 8.10.2 ==="
           cat gradle/wrapper/gradle-wrapper.properties
           echo ""
           echo "=== Updating distributionUrl ==="
-          sed -i 's/gradle-[0-9]\+\.[0-9]\+/gradle-8.9/g' gradle/wrapper/gradle-wrapper.properties
+          sed -i 's|distributionUrl=.*|distributionUrl=https\://services.gradle.org/distributions/gradle-8.10.2-all.zip|g' gradle/wrapper/gradle-wrapper.properties
           echo "=== Updated gradle-wrapper.properties ==="
           cat gradle/wrapper/gradle-wrapper.properties
 
@@ -154,34 +154,6 @@ jobs:
             -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US" || true
 
-      - name: Pre-build Diagnostics
-        working-directory: mobile/android
-        run: |
-          echo "=== Pre-build Diagnostics ==="
-          echo "=== Java Version ==="
-          java -version
-          echo ""
-          echo "=== Gradle Wrapper Version ==="
-          ./gradlew --version || echo "Cannot get Gradle version"
-          echo ""
-          echo "=== Root build.gradle ==="
-          cat build.gradle
-          echo ""
-          echo "=== App build.gradle ==="
-          cat app/build.gradle
-          echo ""
-          echo "=== gradle-wrapper.properties ==="
-          cat gradle/wrapper/gradle-wrapper.properties
-          echo ""
-          echo "=== gradle.properties ==="
-          cat gradle.properties
-          echo ""
-          echo "=== Android Directory Structure ==="
-          find . -type f -name "*.gradle" | head -20
-          echo ""
-          echo "=== Node Modules Check ==="
-          ls -la ../node_modules/react-native/android/com/facebook/react/react-native/ 2>/dev/null || echo "No react-native android artifacts"
-
       - name: Build Debug APK
         working-directory: mobile/android
         run: |
@@ -193,18 +165,6 @@ jobs:
           echo "Debug exit code: $EXIT_CODE"
           if [ $EXIT_CODE -ne 0 ]; then
             echo "DEBUG BUILD FAILED!"
-            echo ""
-            echo "=== DIAGNOSTIC: Root build.gradle ==="
-            cat ../android/build.gradle 2>/dev/null || echo "Cannot read root build.gradle"
-            echo ""
-            echo "=== DIAGNOSTIC: App build.gradle (first 100 lines) ==="
-            head -100 app/build.gradle 2>/dev/null || echo "Cannot read app/build.gradle"
-            echo ""
-            echo "=== DIAGNOSTIC: gradle-wrapper.properties ==="
-            cat gradle/wrapper/gradle-wrapper.properties 2>/dev/null || echo "Cannot read gradle-wrapper.properties"
-            echo ""
-            echo "=== DIAGNOSTIC: gradle.properties ==="
-            cat gradle.properties 2>/dev/null || echo "Cannot read gradle.properties"
             echo ""
             echo "=== DIAGNOSTIC: Last 200 lines of gradle-debug.log ==="
             tail -200 ../gradle-debug.log 2>/dev/null || echo "Cannot read gradle-debug.log"
@@ -248,7 +208,6 @@ jobs:
           path: |
             mobile/npm-install.log
             mobile/prebuild.log
-            mobile/gradle-clean.log
             mobile/gradle-debug.log
             mobile/gradle-release.log
           retention-days: 7

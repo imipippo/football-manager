@@ -80,9 +80,25 @@ jobs:
       - name: Run Android build fix script
         run: python3 scripts/fix-android-build.py
 
+      - name: Grant execute permission
+        run: chmod +x mobile/android/gradlew
+
+      - name: Verify android directory
+        run: |
+          echo "=== Checking android directory ==="
+          ls -la mobile/android/ 2>/dev/null || echo "android directory not found"
+          echo "=== Checking gradlew ==="
+          ls -la mobile/android/gradlew 2>/dev/null || echo "gradlew not found"
+          echo "=== Checking build.gradle ==="
+          ls -la mobile/android/build.gradle 2>/dev/null || echo "build.gradle not found"
+          echo "=== Checking settings.gradle ==="
+          ls -la mobile/android/settings.gradle 2>/dev/null || echo "settings.gradle not found"
+
       - name: Clean Gradle
         working-directory: mobile/android
-        run: ./gradlew clean --no-daemon
+        run: |
+          echo "=== Running gradlew clean ==="
+          ./gradlew clean --no-daemon --stacktrace 2>&1 | tee ../gradle-clean.log || true
 
       - name: Verify build configuration
         run: |
@@ -104,9 +120,6 @@ jobs:
             -keysize 2048 \
             -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US" || true
-
-      - name: Grant execute permission
-        run: chmod +x mobile/android/gradlew
 
       - name: Build Debug APK
         working-directory: mobile/android
@@ -159,6 +172,7 @@ jobs:
           path: |
             mobile/npm-install.log
             mobile/prebuild.log
+            mobile/gradle-clean.log
             mobile/gradle-debug.log
             mobile/gradle-release.log
           retention-days: 7

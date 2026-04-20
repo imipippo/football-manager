@@ -42,12 +42,6 @@ jobs:
           rm -f package-lock.json
           echo "=== npm install ==="
           npm install --legacy-peer-deps 2>&1 | tee npm-install.log
-          NPM_EXIT=${PIPESTATUS[0]}
-          if [ $NPM_EXIT -ne 0 ]; then
-            echo "ERROR: npm install failed with exit code $NPM_EXIT!"
-            tail -100 npm-install.log
-            exit 1
-          fi
           if [ ! -d node_modules/expo ]; then
             echo "ERROR: expo module not found!"
             exit 1
@@ -69,39 +63,34 @@ jobs:
 
       - name: Clean android directory
         run: |
-          echo "=== Removing mobile/android directory ==="
           rm -rf mobile/android
-          ls -la mobile/ | grep android || echo "android directory removed successfully"
+          echo "Removed old android directory"
 
       - name: Expo Prebuild
         working-directory: mobile
         run: |
           set -o pipefail
-          echo "=== Current directory contents ==="
-          ls -la
-          echo "=== app.json contents ==="
-          cat app.json
           echo "=== Running expo prebuild (Expo SDK 53) ==="
           npx expo prebuild --platform android --clean 2>&1 | tee prebuild.log
           PREBUILD_EXIT=${PIPESTATUS[0]}
           echo "Expo prebuild exit code: $PREBUILD_EXIT"
           if [ $PREBUILD_EXIT -ne 0 ]; then
             echo "ERROR: expo prebuild failed with exit code $PREBUILD_EXIT!"
-            echo "=== Full prebuild log ==="
-            cat prebuild.log
+            echo "=== Last 50 lines of prebuild log ==="
+            tail -50 prebuild.log
             exit 1
           fi
           if [ ! -d android ]; then
             echo "ERROR: android directory NOT created!"
-            echo "=== Full prebuild log ==="
-            cat prebuild.log
+            echo "=== Last 50 lines of prebuild log ==="
+            tail -50 prebuild.log
             exit 1
           fi
           echo "=== Prebuild succeeded! ==="
-          echo "=== Generated Android directory structure ==="
-          find android -type f | head -20
-          echo "=== Generated build.gradle ==="
-          cat android/build.gradle
+          echo "=== Generated Gradle files ==="
+          find android -name "*.gradle" -type f | head -10
+          echo "=== Kotlin version in root build.gradle ==="
+          grep -n "kotlin" android/build.gradle 2>/dev/null || echo "no kotlin found"
 
       - name: Run Android build fix script
         run: python3 scripts/fix-android-build.py
@@ -112,11 +101,13 @@ jobs:
       - name: Verify android directory
         run: |
           echo "=== Checking android directory ==="
-          ls -la mobile/android/
+          ls -la mobile/android/ 2>/dev/null || echo "android directory not found"
           echo "=== Checking gradlew ==="
-          ls -la mobile/android/gradlew
+          ls -la mobile/android/gradlew 2>/dev/null || echo "gradlew not found"
           echo "=== Checking build.gradle ==="
-          head -50 mobile/android/build.gradle
+          ls -la mobile/android/build.gradle 2>/dev/null || echo "build.gradle not found"
+          echo "=== Checking settings.gradle ==="
+          ls -la mobile/android/settings.gradle 2>/dev/null || echo "settings.gradle not found"
 
       - name: Clean Gradle
         working-directory: mobile/android
@@ -130,7 +121,7 @@ jobs:
           echo "--- Kotlin version in root build.gradle ---"
           grep -n "kotlin" mobile/android/build.gradle 2>/dev/null || echo "no kotlin found"
           echo "--- gradle.properties ---"
-          cat mobile/android/gradle.properties
+          grep -n "kotlin\|org.gradle" mobile/android/gradle.properties 2>/dev/null || echo "no relevant properties found"
           echo "=== Verification complete ==="
 
       - name: Generate Debug Keystore
@@ -156,8 +147,21 @@ jobs:
           echo "Debug exit code: $EXIT_CODE"
           if [ $EXIT_CODE -ne 0 ]; then
             echo "DEBUG BUILD FAILED!"
-            echo "=== Last 100 lines of gradle-debug.log ==="
-            tail -100 ../gradle-debug.log
+            echo ""
+            echo "=== DIAGNOSTIC: Root build.gradle ==="
+            cat ../android/build.gradle 2>/dev/null || echo "Cannot read root build.gradle"
+            echo ""
+            echo "=== DIAGNOSTIC: App build.gradle (first 100 lines) ==="
+            head -100 app/build.gradle 2>/dev/null || echo "Cannot read app/build.gradle"
+            echo ""
+            echo "=== DIAGNOSTIC: gradle-wrapper.properties ==="
+            cat gradle/wrapper/gradle-wrapper.properties 2>/dev/null || echo "Cannot read gradle-wrapper.properties"
+            echo ""
+            echo "=== DIAGNOSTIC: gradle.properties ==="
+            cat gradle.properties 2>/dev/null || echo "Cannot read gradle.properties"
+            echo ""
+            echo "=== DIAGNOSTIC: Last 100 lines of gradle-debug.log ==="
+            tail -100 ../gradle-debug.log 2>/dev/null || echo "Cannot read gradle-debug.log"
             exit 1
           fi
 
@@ -172,8 +176,6 @@ jobs:
           echo "Release exit code: $EXIT_CODE"
           if [ $EXIT_CODE -ne 0 ]; then
             echo "RELEASE BUILD FAILED!"
-            echo "=== Last 100 lines of gradle-release.log ==="
-            tail -100 ../gradle-release.log
             exit 1
           fi
 

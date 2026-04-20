@@ -95,49 +95,16 @@ jobs:
       - name: Fix build.gradle for SDK 53
         run: |
           echo "=== Fixing build.gradle for Expo SDK 53 ==="
-          # Create a completely new build.gradle with hardcoded values using Python
-          python3 << 'PYEOF'
-          build_gradle_content = '''// Expo SDK 53 / React Native 0.79 compatibility
-ext {
-    buildToolsVersion = "35.0.0"
-    minSdkVersion = 24
-    compileSdkVersion = 35
-    targetSdkVersion = 35
-    kotlinVersion = "2.0.21"
-    ndkVersion = "27.1.12297006"
-}
-
-buildscript {
-    ext {
-        buildToolsVersion = "35.0.0"
-        minSdkVersion = 24
-        compileSdkVersion = 35
-        targetSdkVersion = 35
-        kotlinVersion = "2.0.21"
-        ndkVersion = "27.1.12297006"
-    }
-    repositories {
-        google()
-        mavenCentral()
-    }
-    dependencies {
-        classpath("com.android.tools.build:gradle:8.5.0")
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21")
-    }
-}
-
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
-        maven { url 'https://www.jitpack.io' }
-    }
-}
-'''
-          with open('mobile/android/build.gradle', 'w') as f:
-              f.write(build_gradle_content)
-          print("Created new build.gradle with hardcoded values")
-          PYEOF
+          # Backup original
+          cp mobile/android/build.gradle mobile/android/build.gradle.bak
+          # Use sed to replace kotlin version
+          sed -i 's/kotlinVersion = "1\.9\.[0-9]\+"/kotlinVersion = "2.0.21"/g' mobile/android/build.gradle
+          sed -i 's/kotlin-gradle-plugin:[0-9]\+\.[0-9]\+\.[0-9]\+/kotlin-gradle-plugin:2.0.21/g' mobile/android/build.gradle
+          # Ensure ext block has correct values
+          sed -i 's/buildToolsVersion = "[0-9]\+\.[0-9]\+\.[0-9]\+"/buildToolsVersion = "35.0.0"/g' mobile/android/build.gradle
+          sed -i 's/compileSdkVersion = [0-9]\+/compileSdkVersion = 35/g' mobile/android/build.gradle
+          sed -i 's/targetSdkVersion = [0-9]\+/targetSdkVersion = 35/g' mobile/android/build.gradle
+          echo "Fixed build.gradle"
           cat mobile/android/build.gradle
 
       - name: Grant execute permission

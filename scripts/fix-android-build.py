@@ -2,7 +2,7 @@ import os
 import re
 import glob
 
-print("=== Android Build Fix Script v16 (Expo SDK 53) ===")
+print("=== Android Build Fix Script v17 (Expo SDK 53) ===")
 print("Fixing expo-build-properties issue in SDK 53 bare workflow")
 print("See: https://github.com/expo/expo/issues/36461")
 
@@ -72,12 +72,12 @@ if os.path.exists(root_build_path):
 """
     
     if content and 'buildToolsVersion' not in content:
-        buildscript_match = re.search(r'(buildscript\s*\{[^}]*dependencies\s*\{)', content, re.DOTALL)
+        buildscript_match = re.search(r'buildscript\s*\{', content)
         if buildscript_match:
-            insert_pos = buildscript_match.start() + len('buildscript {')
+            insert_pos = buildscript_match.end()
             content = content[:insert_pos] + '\n    ' + ext_block + content[insert_pos:]
             write_file(root_build_path, content)
-            print(f"  Added ext block to root build.gradle")
+            print(f"  Added ext block to root build.gradle after buildscript {{")
         else:
             print(f"  WARNING: Could not find buildscript block in root build.gradle")
     else:
@@ -116,6 +116,16 @@ if os.path.exists(settings_path):
             print(f"  OK: apply from directives found")
 else:
     print(f"  WARNING: {settings_path} not found")
+
+print("\n[Step 6] Print root build.gradle for verification")
+if os.path.exists(root_build_path):
+    content = read_file(root_build_path)
+    if content:
+        print("  === First 50 lines of root build.gradle ===")
+        lines = content.split('\n')[:50]
+        for i, line in enumerate(lines, 1):
+            print(f"  {i:3}: {line}")
+        print("  === End of preview ===")
 
 print("\n=== Fix script completed ===")
 print("Expo SDK 53 ext block bug has been worked around!")

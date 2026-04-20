@@ -37,10 +37,17 @@ jobs:
       - name: Install npm dependencies
         working-directory: mobile
         run: |
+          set -o pipefail
           echo "=== Removing old package-lock.json ==="
           rm -f package-lock.json
           echo "=== npm install ==="
           npm install --legacy-peer-deps 2>&1 | tee npm-install.log
+          NPM_EXIT=${PIPESTATUS[0]}
+          if [ $NPM_EXIT -ne 0 ]; then
+            echo "ERROR: npm install failed with exit code $NPM_EXIT!"
+            tail -100 npm-install.log
+            exit 1
+          fi
           if [ ! -d node_modules/expo ]; then
             echo "ERROR: expo module not found!"
             exit 1
@@ -68,12 +75,24 @@ jobs:
       - name: Expo Prebuild
         working-directory: mobile
         run: |
+          set -o pipefail
           echo "=== Running expo prebuild (Expo SDK 53) ==="
           npx expo prebuild --platform android --clean 2>&1 | tee prebuild.log
-          if [ ! -d android ]; then
-            echo "ERROR: android directory NOT created!"
+          PREBUILD_EXIT=${PIPESTATUS[0]}
+          echo "Expo prebuild exit code: $PREBUILD_EXIT"
+          if [ $PREBUILD_EXIT -ne 0 ]; then
+            echo "ERROR: expo prebuild failed with exit code $PREBUILD_EXIT!"
+            echo "=== Last 100 lines of prebuild log ==="
+            tail -100 prebuild.log
             exit 1
           fi
+          if [ ! -d android ]; then
+            echo "ERROR: android directory NOT created!"
+            echo "=== Last 100 lines of prebuild log ==="
+            tail -100 prebuild.log
+            exit 1
+          fi
+          echo "=== Prebuild succeeded! ==="
           echo "=== Generated Gradle files ==="
           find android -name "*.gradle" -type f | head -10
           echo "=== Kotlin version in root build.gradle ==="
@@ -134,6 +153,8 @@ jobs:
           echo "Debug exit code: $EXIT_CODE"
           if [ $EXIT_CODE -ne 0 ]; then
             echo "DEBUG BUILD FAILED!"
+            echo "=== Last 100 lines of gradle-debug.log ==="
+            tail -100 ../gradle-debug.log
             exit 1
           fi
 
@@ -148,6 +169,8 @@ jobs:
           echo "Release exit code: $EXIT_CODE"
           if [ $EXIT_CODE -ne 0 ]; then
             echo "RELEASE BUILD FAILED!"
+            echo "=== Last 100 lines of gradle-release.log ==="
+            tail -100 ../gradle-release.log
             exit 1
           fi
 

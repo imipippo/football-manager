@@ -2,7 +2,7 @@ import os
 import re
 import glob
 
-print("=== Android Build Fix Script v18 (Expo SDK 53) ===")
+print("=== Android Build Fix Script v19 (Expo SDK 53) ===")
 print("Fixing expo-build-properties and Gradle version issues in SDK 53")
 print("See: https://github.com/expo/expo/issues/36461")
 print("See: https://github.com/expo/expo/issues/38199")
@@ -78,116 +78,141 @@ if os.path.exists(props_path):
 else:
     print(f"  WARNING: {props_path} not found (will be created by expo prebuild)")
 
-print("\n[Step 4] Fix missing ext block in root build.gradle (SDK 53 bug workaround)")
+print("\n[Step 4] Fix root build.gradle for SDK 53 compatibility")
 root_build_path = os.path.join(android_dir, "build.gradle")
 if os.path.exists(root_build_path):
     content = read_file(root_build_path)
-    original_content = content
     
-    # Check if ext block exists - SDK 53 sometimes generates build.gradle without ext block
-    if content and 'buildToolsVersion' not in content:
-        print("  WARNING: ext block not found, adding it...")
-        ext_block = """ext {
-        buildToolsVersion = findProperty('android.buildToolsVersion') ?: '35.0.0'
-        minSdkVersion = Integer.parseInt(findProperty('android.minSdkVersion') ?: '24')
-        compileSdkVersion = Integer.parseInt(findProperty('android.compileSdkVersion') ?: '35')
-        targetSdkVersion = Integer.parseInt(findProperty('android.targetSdkVersion') ?: '35')
-        kotlinVersion = findProperty('android.kotlinVersion') ?: '2.0.21'
-        ndkVersion = findProperty('android.ndkVersion') ?: '27.1.12297006'
-    }
-"""
-        # Try to find the best place to insert ext block
-        # Option 1: After buildscript block
-        buildscript_match = re.search(r'buildscript\s*\{[^}]+\}', content, re.DOTALL)
-        if buildscript_match:
-            insert_pos = buildscript_match.end()
-            content = content[:insert_pos] + '\n\n' + ext_block + content[insert_pos:]
-            print(f"  Added ext block after buildscript block")
-        else:
-            # Option 2: At the beginning of the file
-            content = ext_block + '\n' + content
-            print(f"  Added ext block at the beginning of the file")
+    # Check if we need to add ext block with hardcoded values (most reliable approach)
+    if content:
+        print("  Checking build.gradle structure...")
         
-        write_file(root_build_path, content)
-    else:
-        print(f"  OK: ext block already present in root build.gradle")
-    
-    # Re-read content after potential modification
-    content = read_file(root_build_path)
-    
-    # Fix: Ensure kotlin-gradle-plugin uses correct version
-    print("\n[Step 4b] Ensure kotlin-gradle-plugin version is 2.0.21")
-    if content and "kotlin-gradle-plugin" in content:
-        # Check if kotlin version is specified in classpath
-        if re.search(r"classpath\s*\(\s*['\"]org\.jetbrains\.kotlin:kotlin-gradle-plugin:\$kotlinVersion['\"]\s*\)", content):
-            print(f"  OK: kotlin-gradle-plugin uses $kotlinVersion variable")
-        elif re.search(r"classpath\s*\(\s*['\"]org\.jetbrains\.kotlin:kotlin-gradle-plugin:[0-9]", content):
-            # Has hardcoded version, check if it matches
-            match = re.search(r"classpath\s*\(\s*['\"]org\.jetbrains\.kotlin:kotlin-gradle-plugin:([0-9.]+)['\"]\s*\)", content)
-            if match:
-                version = match.group(1)
-                if version.startswith("2.0"):
-                    print(f"  OK: kotlin-gradle-plugin version is {version}")
-                else:
-                    print(f"  WARNING: kotlin-gradle-plugin version is {version}, expected 2.0.21")
-                    # Replace with variable reference
-                    content = re.sub(
-                        r"classpath\s*\(\s*['\"]org\.jetbrains\.kotlin:kotlin-gradle-plugin:[0-9.]+['\"]\s*\)",
-                        "classpath(\"org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion\")",
-                        content
-                    )
-                    write_file(root_build_path, content)
-                    print(f"  Fixed: Changed to use $kotlinVersion variable")
+        # If the file doesn't have ext block with our variables, we need to add it
+        if 'buildToolsVersion' not in content or 'kotlinVersion' not in content:
+            print("  Adding ext block with SDK 53 compatible values...")
+            
+            # Create a complete ext block that will be inserted at the beginning
+            ext_block = """// Expo SDK 53 / RN 0.79 compatibility - hardcoded values
+ext {
+    buildToolsVersion = "35.0.0"
+    minSdkVersion = 24
+    compileSdkVersion = 35
+    targetSdkVersion = 35
+    kotlinVersion = "2.0.21"
+    ndkVersion = "27.1.12297006"
+}
+
+"""
+            # Insert at the very beginning of the file
+            content = ext_block + content
+            write_file(root_build_path, content)
+            print("  Added ext block at the beginning of build.gradle")
         else:
-            print(f"  WARNING: Could not determine kotlin-gradle-plugin version format")
+            print("  OK: ext block already present")
+        
+        # Re-read content
+        content = read_file(root_build_path)
+        
+        # Fix: Ensure kotlin-gradle-plugin uses the correct version
+        print("\n[Step 4b] Ensure kotlin-gradle-plugin uses Kotlin 2.0.21")
+        kotlin_pattern = r"classpath\s*\(\s*['\"]org\.jetbrains\.kotlin:kotlin-gradle-plugin:([^'\"]+)['\"]\s*\)"
+        match = re.search(kotlin_pattern, content)
+        
+        if match:
+            current_version = match.group(1)
+            if current_version == "$kotlinVersion":
+                print(f"  OK: kotlin-gradle-plugin uses $kotlinVersion variable")
+            elif current_version.startswith("2.0"):
+                print(f"  OK: kotlin-gradle-plugin version is {current_version}")
+            else:
+                print(f"  WARNING: kotlin-gradle-plugin version is {current_version}, updating to 2.0.21")
+                content = re.sub(
+                    kotlin_pattern,
+                    'classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21")',
+                    content
+                )
+                write_file(root_build_path, content)
+                print("  Fixed: Updated kotlin-gradle-plugin to 2.0.21")
+        else:
+            print("  WARNING: Could not find kotlin-gradle-plugin classpath")
     
     # Re-read content
     content = read_file(root_build_path)
     
-    # Fix: Ensure ext block is defined BEFORE buildscript if it's at root level
-    # This is important for the variables to be available in buildscript
-    print("\n[Step 4c] Verify ext block placement")
+    # Fix: Ensure ext block is at the very beginning (before any other blocks)
+    print("\n[Step 4c] Verify ext block is at the beginning")
     if 'ext {' in content:
         ext_pos = content.find('ext {')
-        buildscript_pos = content.find('buildscript {')
+        # Find the first non-comment, non-whitespace content
+        lines = content.split('\n')
+        first_real_line = 0
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped and not stripped.startswith('//'):
+                first_real_line = i
+                break
         
-        if buildscript_pos > 0 and ext_pos > buildscript_pos:
-            print("  WARNING: ext block is after buildscript, variables may not be accessible")
-            print("  This is a known SDK 53 issue - ext block should be at root level before buildscript")
-            # We need to move ext block to before buildscript
+        # Check if ext block starts at or near the beginning
+        if ext_pos > 500:  # If ext block is not near the beginning
+            print("  WARNING: ext block is not at the beginning, restructuring...")
             # Extract ext block
             ext_match = re.search(r'ext\s*\{[^}]+\}', content, re.DOTALL)
             if ext_match:
                 ext_block_content = ext_match.group(0)
                 # Remove ext block from current position
                 content = content[:ext_match.start()] + content[ext_match.end():]
-                # Add ext block before buildscript
+                # Add ext block at the very beginning
                 content = ext_block_content + '\n\n' + content
                 write_file(root_build_path, content)
-                print("  Fixed: Moved ext block to before buildscript")
+                print("  Fixed: Moved ext block to the beginning")
         else:
-            print("  OK: ext block is properly placed")
+            print("  OK: ext block is at the beginning")
 else:
     print(f"  WARNING: {root_build_path} not found (will be created by expo prebuild)")
 
-print("\n[Step 5] Add kotlinOptions to app/build.gradle if needed")
+print("\n[Step 5] Fix app/build.gradle for SDK 53 compatibility")
 app_build_path = os.path.join(android_dir, "app/build.gradle")
 if os.path.exists(app_build_path):
     content = read_file(app_build_path)
-    if content and 'kotlinOptions' not in content:
-        android_match = re.search(r'(android\s*\{)', content)
-        if android_match:
-            insert_pos = android_match.end()
-            kotlin_options = """
+    if content:
+        # Add kotlinOptions if not present
+        if 'kotlinOptions' not in content:
+            android_match = re.search(r'(android\s*\{)', content)
+            if android_match:
+                insert_pos = android_match.end()
+                kotlin_options = """
         kotlinOptions {
             jvmTarget = '17'
         }
 """
-            content = content[:insert_pos] + kotlin_options + content[insert_pos:]
+                content = content[:insert_pos] + kotlin_options + content[insert_pos:]
+                write_file(app_build_path, content)
+                print(f"  Added kotlinOptions to app/build.gradle")
+        else:
+            print(f"  OK: kotlinOptions already present")
+        
+        # Ensure compileSdkVersion uses the ext variable or hardcoded value
+        content = read_file(app_build_path)
+        if 'compileSdkVersion' in content:
+            # Replace any hardcoded compileSdkVersion with the ext variable
+            content = re.sub(
+                r'compileSdkVersion\s+\d+',
+                'compileSdkVersion rootProject.ext.compileSdkVersion',
+                content
+            )
             write_file(app_build_path, content)
-            print(f"  Added kotlinOptions to app/build.gradle")
-    else:
-        print(f"  OK: kotlinOptions already present or file not found")
+            print("  Fixed: compileSdkVersion now uses rootProject.ext.compileSdkVersion")
+        
+        # Ensure buildToolsVersion uses the ext variable
+        content = read_file(app_build_path)
+        if 'buildToolsVersion' in content:
+            content = re.sub(
+                r'buildToolsVersion\s+["\'][^"\']+["\']',
+                'buildToolsVersion rootProject.ext.buildToolsVersion',
+                content
+            )
+            write_file(app_build_path, content)
+            print("  Fixed: buildToolsVersion now uses rootProject.ext.buildToolsVersion")
 else:
     print(f"  WARNING: {app_build_path} not found (will be created by expo prebuild)")
 
@@ -206,11 +231,11 @@ print("\n[Step 7] Print root build.gradle for verification")
 if os.path.exists(root_build_path):
     content = read_file(root_build_path)
     if content:
-        print("  === First 80 lines of root build.gradle ===")
-        lines = content.split('\n')[:80]
+        print("  === Full root build.gradle ===")
+        lines = content.split('\n')
         for i, line in enumerate(lines, 1):
             print(f"  {i:3}: {line}")
-        print("  === End of preview ===")
+        print("  === End of build.gradle ===")
         
         # Check for critical configurations
         print("\n[Step 7b] Critical configuration check")

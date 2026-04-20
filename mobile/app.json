@@ -6,6 +6,23 @@
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "assetBundlePatterns": ["**/*"],
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "buildToolsVersion": "35.0.0",
+            "minSdkVersion": 24,
+            "kotlinVersion": "2.0.21"
+          },
+          "ios": {
+            "deploymentTarget": "15.1"
+          }
+        }
+      ]
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.footballmanager.app"

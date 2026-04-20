@@ -95,21 +95,25 @@ jobs:
       - name: Fix build.gradle for SDK 53
         run: |
           echo "=== Fixing build.gradle for Expo SDK 53 ==="
-          # Backup original
-          cp mobile/android/build.gradle mobile/android/build.gradle.bak
-          echo "=== Original build.gradle (first 50 lines) ==="
-          head -50 mobile/android/build.gradle
-          echo ""
-          # Use sed to replace kotlin version - handle various formats
-          sed -i 's/kotlinVersion = "1\.[0-9]\+\.[0-9]\+"/kotlinVersion = "2.0.21"/g' mobile/android/build.gradle
-          sed -i 's/kotlin-gradle-plugin:[0-9]\+\.[0-9]\+\.[0-9]\+/kotlin-gradle-plugin:2.0.21/g' mobile/android/build.gradle
-          # Ensure ext block has correct values
-          sed -i 's/buildToolsVersion = "[0-9]\+\.[0-9]\+\.[0-9]\+"/buildToolsVersion = "35.0.0"/g' mobile/android/build.gradle
-          sed -i 's/compileSdkVersion = [0-9]\+/compileSdkVersion = 35/g' mobile/android/build.gradle
-          sed -i 's/targetSdkVersion = [0-9]\+/targetSdkVersion = 35/g' mobile/android/build.gradle
-          # Also fix minSdkVersion if needed
-          sed -i 's/minSdkVersion = [0-9]\+/minSdkVersion = 24/g' mobile/android/build.gradle
-          echo "=== Fixed build.gradle (first 50 lines) ==="
+          # Check if CI version exists
+          if [ -f "mobile/android/build.gradle.ci" ]; then
+            echo "Using pre-generated CI build.gradle"
+            cp mobile/android/build.gradle.ci mobile/android/build.gradle
+          else
+            echo "CI build.gradle not found, using sed to fix"
+            # Backup original
+            cp mobile/android/build.gradle mobile/android/build.gradle.bak
+            # Use sed to replace kotlin version - handle various formats
+            sed -i 's/kotlinVersion = "1\.[0-9]\+\.[0-9]\+"/kotlinVersion = "2.0.21"/g' mobile/android/build.gradle
+            sed -i 's/kotlin-gradle-plugin:[0-9]\+\.[0-9]\+\.[0-9]\+/kotlin-gradle-plugin:2.0.21/g' mobile/android/build.gradle
+            # Ensure ext block has correct values
+            sed -i 's/buildToolsVersion = "[0-9]\+\.[0-9]\+\.[0-9]\+"/buildToolsVersion = "35.0.0"/g' mobile/android/build.gradle
+            sed -i 's/compileSdkVersion = [0-9]\+/compileSdkVersion = 35/g' mobile/android/build.gradle
+            sed -i 's/targetSdkVersion = [0-9]\+/targetSdkVersion = 35/g' mobile/android/build.gradle
+            # Also fix minSdkVersion if needed
+            sed -i 's/minSdkVersion = [0-9]\+/minSdkVersion = 24/g' mobile/android/build.gradle
+          fi
+          echo "=== Final build.gradle (first 50 lines) ==="
           head -50 mobile/android/build.gradle
           echo ""
           echo "=== Verifying kotlin version ==="

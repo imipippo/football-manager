@@ -95,9 +95,12 @@ jobs:
       - name: Fix build.gradle for SDK 53
         run: |
           echo "=== Fixing build.gradle for Expo SDK 53 ==="
-          # Check if CI version exists
-          if [ -f "mobile/android/build.gradle.ci" ]; then
+          # Check if CI version exists (outside android directory to survive clean)
+          if [ -f "mobile/android-build.gradle.ci" ]; then
             echo "Using pre-generated CI build.gradle"
+            cp mobile/android-build.gradle.ci mobile/android/build.gradle
+          elif [ -f "mobile/android/build.gradle.ci" ]; then
+            echo "Using pre-generated CI build.gradle from android dir"
             cp mobile/android/build.gradle.ci mobile/android/build.gradle
           else
             echo "CI build.gradle not found, using sed to fix"

@@ -95,9 +95,9 @@ jobs:
       - name: Fix build.gradle for SDK 53
         run: |
           echo "=== Fixing build.gradle for Expo SDK 53 ==="
-          # Create a completely new build.gradle with hardcoded values
-          cat > mobile/android/build.gradle << 'BUILDEof'
-// Expo SDK 53 / React Native 0.79 compatibility
+          # Create a completely new build.gradle with hardcoded values using Python
+          python3 << 'PYEOF'
+          build_gradle_content = '''// Expo SDK 53 / React Native 0.79 compatibility
 ext {
     buildToolsVersion = "35.0.0"
     minSdkVersion = 24
@@ -133,8 +133,11 @@ allprojects {
         maven { url 'https://www.jitpack.io' }
     }
 }
-BUILDEof
-          echo "Created new build.gradle with hardcoded values"
+'''
+          with open('mobile/android/build.gradle', 'w') as f:
+              f.write(build_gradle_content)
+          print("Created new build.gradle with hardcoded values")
+          PYEOF
           cat mobile/android/build.gradle
 
       - name: Grant execute permission

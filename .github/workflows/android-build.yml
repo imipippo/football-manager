@@ -115,23 +115,61 @@ jobs:
           echo "=== Running gradlew clean ==="
           ./gradlew clean --no-daemon --stacktrace 2>&1 | tee ../gradle-clean.log || true
 
-      - name: Verify build configuration
+      - name: Verify and fix build configuration
         run: |
-          echo "=== Verifying build configuration (Expo SDK 53) ==="
+          echo "=== Verifying and fixing build configuration (Expo SDK 53) ==="
           echo ""
-          echo "--- Full root build.gradle ---"
+          echo "--- Original root build.gradle ---"
           cat mobile/android/build.gradle 2>/dev/null || echo "ERROR: Cannot read root build.gradle"
           echo ""
-          echo "--- gradle-wrapper.properties ---"
-          cat mobile/android/gradle/wrapper/gradle-wrapper.properties 2>/dev/null || echo "ERROR: Cannot read gradle-wrapper.properties"
+          
+          echo "--- Applying direct fix to build.gradle ---"
+          # Create a completely new build.gradle with hardcoded values
+          cat > mobile/android/build.gradle << 'EOF'
+// Expo SDK 53 / React Native 0.79 compatibility
+ext {
+    buildToolsVersion = "35.0.0"
+    minSdkVersion = 24
+    compileSdkVersion = 35
+    targetSdkVersion = 35
+    kotlinVersion = "2.0.21"
+    ndkVersion = "27.1.12297006"
+}
+
+buildscript {
+    ext {
+        buildToolsVersion = "35.0.0"
+        minSdkVersion = 24
+        compileSdkVersion = 35
+        targetSdkVersion = 35
+        kotlinVersion = "2.0.21"
+        ndkVersion = "27.1.12297006"
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.5.0")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21")
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url 'https://www.jitpack.io' }
+    }
+}
+EOF
+          echo "Created new build.gradle with hardcoded values"
+          
           echo ""
-          echo "--- gradle.properties ---"
-          cat mobile/android/gradle.properties 2>/dev/null || echo "ERROR: Cannot read gradle.properties"
+          echo "--- New root build.gradle ---"
+          cat mobile/android/build.gradle
           echo ""
-          echo "--- app/build.gradle (first 50 lines) ---"
-          head -50 mobile/android/app/build.gradle 2>/dev/null || echo "ERROR: Cannot read app/build.gradle"
-          echo ""
-          echo "=== Verification complete ==="
+          echo "=== Fix applied ==="
 
       - name: Generate Debug Keystore
         run: |

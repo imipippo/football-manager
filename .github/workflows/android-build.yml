@@ -61,81 +61,59 @@ jobs:
             fi
           done
 
-      - name: Check android directory
-        run: |
-          echo "=== Checking android directory ==="
-          if [ -d "mobile/android" ]; then
-            echo "Android directory exists"
-            ls -la mobile/android/
-          else
-            echo "Android directory does not exist, need to generate"
-          fi
-
-      - name: Expo Prebuild (if needed)
+      - name: Clean old android directory
         working-directory: mobile
         run: |
-          if [ ! -d "android" ]; then
-            set -o pipefail
-            echo "=== Running expo prebuild (Expo SDK 53) ==="
-            npx expo prebuild --platform android --clean 2>&1 | tee prebuild.log
-            PREBUILD_EXIT=${PIPESTATUS[0]}
-            echo "Expo prebuild exit code: $PREBUILD_EXIT"
-            if [ $PREBUILD_EXIT -ne 0 ]; then
-              echo "ERROR: expo prebuild failed with exit code $PREBUILD_EXIT!"
-              echo "=== Last 50 lines of prebuild log ==="
-              tail -50 prebuild.log
-              exit 1
-            fi
-            if [ ! -d android ]; then
-              echo "ERROR: android directory NOT created!"
-              echo "=== Last 50 lines of prebuild log ==="
-              tail -50 prebuild.log
-              exit 1
-            fi
-            echo "=== Prebuild succeeded! ==="
-          else
-            echo "Android directory already exists, skipping prebuild"
-          fi
+          echo "=== Removing old android directory to force fresh prebuild ==="
+          rm -rf android
+          echo "Android directory removed"
 
-      - name: Fix build.gradle for SDK 53
+      - name: Expo Prebuild
         working-directory: mobile
         run: |
-          echo "=== Fixing build.gradle for Expo SDK 53 ==="
-          # Always use the CI version
-          if [ -f "android-build.gradle.ci" ]; then
-            echo "Using pre-generated CI build.gradle from mobile directory"
-            cp android-build.gradle.ci android/build.gradle
-          elif [ -f "android/build.gradle.ci" ]; then
-            echo "Using pre-generated CI build.gradle from android dir"
-            cp android/build.gradle.ci android/build.gradle
-          else
-            echo "WARNING: CI build.gradle not found, using existing or sed to fix"
-            # Backup original
-            cp android/build.gradle android/build.gradle.bak
-            # Use sed to replace kotlin version - handle various formats
-            sed -i 's/kotlinVersion = "1\.[0-9]\+\.[0-9]\+"/kotlinVersion = "2.0.21"/g' android/build.gradle
-            sed -i 's/kotlin-gradle-plugin:[0-9]\+\.[0-9]\+\.[0-9]\+/kotlin-gradle-plugin:2.0.21/g' android/build.gradle
-            # Ensure ext block has correct values
-            sed -i 's/buildToolsVersion = "[0-9]\+\.[0-9]\+\.[0-9]\+"/buildToolsVersion = "35.0.0"/g' android/build.gradle
-            sed -i 's/compileSdkVersion = [0-9]\+/compileSdkVersion = 35/g' android/build.gradle
-            sed -i 's/targetSdkVersion = [0-9]\+/targetSdkVersion = 35/g' android/build.gradle
-            # Also fix minSdkVersion if needed
-            sed -i 's/minSdkVersion = [0-9]\+/minSdkVersion = 24/g' android/build.gradle
+          set -o pipefail
+          echo "=== Running expo prebuild (Expo SDK 53) ==="
+          npx expo prebuild --platform android --clean 2>&1 | tee prebuild.log
+          PREBUILD_EXIT=${PIPESTATUS[0]}
+          echo "Expo prebuild exit code: $PREBUILD_EXIT"
+          if [ $PREBUILD_EXIT -ne 0 ]; then
+            echo "ERROR: expo prebuild failed with exit code $PREBUILD_EXIT!"
+            echo "=== Last 80 lines of prebuild log ==="
+            tail -80 prebuild.log
+            exit 1
           fi
-          echo "=== Final build.gradle (first 50 lines) ==="
-          head -50 android/build.gradle
+          if [ ! -d android ]; then
+            echo "ERROR: android directory NOT created!"
+            echo "=== Last 80 lines of prebuild log ==="
+            tail -80 prebuild.log
+            exit 1
+          fi
+          echo "=== Prebuild succeeded! ==="
+          echo "=== Android directory contents ==="
+          ls -la android/
+          echo "=== Root build.gradle ==="
+          cat android/build.gradle
           echo ""
-          echo "=== Verifying kotlin version ==="
-          grep -n "kotlin" android/build.gradle || echo "No kotlin found"
+          echo "=== App build.gradle ==="
+          cat android/app/build.gradle
 
       - name: Fix Gradle version
         working-directory: mobile/android
         run: |
-          echo "=== Fixing Gradle version to 8.10.2 ==="
+          echo "=== Current gradle-wrapper.properties ==="
           cat gradle/wrapper/gradle-wrapper.properties
           echo ""
-          echo "=== Updating distributionUrl ==="
-          sed -i 's|distributionUrl=.*|distributionUrl=https\://services.gradle.org/distributions/gradle-8.10.2-all.zip|g' gradle/wrapper/gradle-wrapper.properties
+          echo "=== Checking if Gradle version needs update ==="
+          CURRENT_GRADLE=$(grep distributionUrl gradle/wrapper/gradle-wrapper.properties | sed 's/.*gradle-\([0-9.]*\).*/\1/')
+          echo "Current Gradle version: $CURRENT_GRADLE"
+          REQUIRED_GRADLE="8.10.2"
+          if [ "$CURRENT_GRADLE" != "$REQUIRED_GRADLE" ]; then
+            echo "Updating Gradle from $CURRENT_GRADLE to $REQUIRED_GRADLE"
+            sed -i "s|distributionUrl=.*|distributionUrl=https\://services.gradle.org/distributions/gradle-${REQUIRED_GRADLE}-all.zip|g" gradle/wrapper/gradle-wrapper.properties
+          else
+            echo "Gradle version is already $REQUIRED_GRADLE, no update needed"
+          fi
+          echo ""
           echo "=== Updated gradle-wrapper.properties ==="
           cat gradle/wrapper/gradle-wrapper.properties
 
@@ -165,6 +143,21 @@ jobs:
           echo "Debug exit code: $EXIT_CODE"
           if [ $EXIT_CODE -ne 0 ]; then
             echo "DEBUG BUILD FAILED!"
+            echo ""
+            echo "=== DIAGNOSTIC: Root build.gradle ==="
+            cat build.gradle 2>/dev/null || echo "Cannot read root build.gradle"
+            echo ""
+            echo "=== DIAGNOSTIC: App build.gradle (first 100 lines) ==="
+            head -100 app/build.gradle 2>/dev/null || echo "Cannot read app/build.gradle"
+            echo ""
+            echo "=== DIAGNOSTIC: settings.gradle ==="
+            cat settings.gradle 2>/dev/null || echo "Cannot read settings.gradle"
+            echo ""
+            echo "=== DIAGNOSTIC: gradle-wrapper.properties ==="
+            cat gradle/wrapper/gradle-wrapper.properties 2>/dev/null || echo "Cannot read gradle-wrapper.properties"
+            echo ""
+            echo "=== DIAGNOSTIC: gradle.properties ==="
+            cat gradle.properties 2>/dev/null || echo "Cannot read gradle.properties"
             echo ""
             echo "=== DIAGNOSTIC: Last 200 lines of gradle-debug.log ==="
             tail -200 ../gradle-debug.log 2>/dev/null || echo "Cannot read gradle-debug.log"

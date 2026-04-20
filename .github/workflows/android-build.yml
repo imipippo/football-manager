@@ -92,38 +92,9 @@ jobs:
           echo "=== Kotlin version in root build.gradle ==="
           grep -n "kotlin" android/build.gradle 2>/dev/null || echo "no kotlin found"
 
-      - name: Run Android build fix script
-        run: python3 scripts/fix-android-build.py
-
-      - name: Grant execute permission
-        run: chmod +x mobile/android/gradlew
-
-      - name: Verify android directory
+      - name: Fix build.gradle for SDK 53
         run: |
-          echo "=== Checking android directory ==="
-          ls -la mobile/android/ 2>/dev/null || echo "android directory not found"
-          echo "=== Checking gradlew ==="
-          ls -la mobile/android/gradlew 2>/dev/null || echo "gradlew not found"
-          echo "=== Checking build.gradle ==="
-          ls -la mobile/android/build.gradle 2>/dev/null || echo "build.gradle not found"
-          echo "=== Checking settings.gradle ==="
-          ls -la mobile/android/settings.gradle 2>/dev/null || echo "settings.gradle not found"
-
-      - name: Clean Gradle
-        working-directory: mobile/android
-        run: |
-          echo "=== Running gradlew clean ==="
-          ./gradlew clean --no-daemon --stacktrace 2>&1 | tee ../gradle-clean.log || true
-
-      - name: Verify and fix build configuration
-        run: |
-          echo "=== Verifying and fixing build configuration (Expo SDK 53) ==="
-          echo ""
-          echo "--- Original root build.gradle ---"
-          cat mobile/android/build.gradle 2>/dev/null || echo "ERROR: Cannot read root build.gradle"
-          echo ""
-          
-          echo "--- Applying direct fix to build.gradle ---"
+          echo "=== Fixing build.gradle for Expo SDK 53 ==="
           # Create a completely new build.gradle with hardcoded values
           cat > mobile/android/build.gradle << 'EOF'
 // Expo SDK 53 / React Native 0.79 compatibility
@@ -164,12 +135,10 @@ allprojects {
 }
 EOF
           echo "Created new build.gradle with hardcoded values"
-          
-          echo ""
-          echo "--- New root build.gradle ---"
           cat mobile/android/build.gradle
-          echo ""
-          echo "=== Fix applied ==="
+
+      - name: Grant execute permission
+        run: chmod +x mobile/android/gradlew
 
       - name: Generate Debug Keystore
         run: |

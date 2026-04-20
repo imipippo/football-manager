@@ -37,6 +37,8 @@ jobs:
       - name: Install npm dependencies
         working-directory: mobile
         run: |
+          echo "=== Removing old package-lock.json ==="
+          rm -f package-lock.json
           echo "=== npm install ==="
           npm install --legacy-peer-deps 2>&1 | tee npm-install.log
           if [ ! -d node_modules/expo ]; then

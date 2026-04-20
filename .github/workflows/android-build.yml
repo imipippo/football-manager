@@ -93,34 +93,38 @@ jobs:
           grep -n "kotlin" android/build.gradle 2>/dev/null || echo "no kotlin found"
 
       - name: Fix build.gradle for SDK 53
+        working-directory: mobile
         run: |
           echo "=== Fixing build.gradle for Expo SDK 53 ==="
+          echo "=== Current directory: $(pwd) ==="
+          echo "=== Listing files ==="
+          ls -la
           # Check if CI version exists (outside android directory to survive clean)
-          if [ -f "mobile/android-build.gradle.ci" ]; then
-            echo "Using pre-generated CI build.gradle"
-            cp mobile/android-build.gradle.ci mobile/android/build.gradle
-          elif [ -f "mobile/android/build.gradle.ci" ]; then
+          if [ -f "android-build.gradle.ci" ]; then
+            echo "Using pre-generated CI build.gradle from mobile directory"
+            cp android-build.gradle.ci android/build.gradle
+          elif [ -f "android/build.gradle.ci" ]; then
             echo "Using pre-generated CI build.gradle from android dir"
-            cp mobile/android/build.gradle.ci mobile/android/build.gradle
+            cp android/build.gradle.ci android/build.gradle
           else
             echo "CI build.gradle not found, using sed to fix"
             # Backup original
-            cp mobile/android/build.gradle mobile/android/build.gradle.bak
+            cp android/build.gradle android/build.gradle.bak
             # Use sed to replace kotlin version - handle various formats
-            sed -i 's/kotlinVersion = "1\.[0-9]\+\.[0-9]\+"/kotlinVersion = "2.0.21"/g' mobile/android/build.gradle
-            sed -i 's/kotlin-gradle-plugin:[0-9]\+\.[0-9]\+\.[0-9]\+/kotlin-gradle-plugin:2.0.21/g' mobile/android/build.gradle
+            sed -i 's/kotlinVersion = "1\.[0-9]\+\.[0-9]\+"/kotlinVersion = "2.0.21"/g' android/build.gradle
+            sed -i 's/kotlin-gradle-plugin:[0-9]\+\.[0-9]\+\.[0-9]\+/kotlin-gradle-plugin:2.0.21/g' android/build.gradle
             # Ensure ext block has correct values
-            sed -i 's/buildToolsVersion = "[0-9]\+\.[0-9]\+\.[0-9]\+"/buildToolsVersion = "35.0.0"/g' mobile/android/build.gradle
-            sed -i 's/compileSdkVersion = [0-9]\+/compileSdkVersion = 35/g' mobile/android/build.gradle
-            sed -i 's/targetSdkVersion = [0-9]\+/targetSdkVersion = 35/g' mobile/android/build.gradle
+            sed -i 's/buildToolsVersion = "[0-9]\+\.[0-9]\+\.[0-9]\+"/buildToolsVersion = "35.0.0"/g' android/build.gradle
+            sed -i 's/compileSdkVersion = [0-9]\+/compileSdkVersion = 35/g' android/build.gradle
+            sed -i 's/targetSdkVersion = [0-9]\+/targetSdkVersion = 35/g' android/build.gradle
             # Also fix minSdkVersion if needed
-            sed -i 's/minSdkVersion = [0-9]\+/minSdkVersion = 24/g' mobile/android/build.gradle
+            sed -i 's/minSdkVersion = [0-9]\+/minSdkVersion = 24/g' android/build.gradle
           fi
           echo "=== Final build.gradle (first 50 lines) ==="
-          head -50 mobile/android/build.gradle
+          head -50 android/build.gradle
           echo ""
           echo "=== Verifying kotlin version ==="
-          grep -n "kotlin" mobile/android/build.gradle || echo "No kotlin found"
+          grep -n "kotlin" android/build.gradle || echo "No kotlin found"
 
       - name: Grant execute permission
         run: chmod +x mobile/android/gradlew

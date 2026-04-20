@@ -96,7 +96,7 @@ jobs:
         run: |
           echo "=== Fixing build.gradle for Expo SDK 53 ==="
           # Create a completely new build.gradle with hardcoded values
-          cat > mobile/android/build.gradle << 'EOF'
+          cat > mobile/android/build.gradle << 'BUILDEof'
 // Expo SDK 53 / React Native 0.79 compatibility
 ext {
     buildToolsVersion = "35.0.0"
@@ -133,7 +133,7 @@ allprojects {
         maven { url 'https://www.jitpack.io' }
     }
 }
-EOF
+BUILDEof
           echo "Created new build.gradle with hardcoded values"
           cat mobile/android/build.gradle
 

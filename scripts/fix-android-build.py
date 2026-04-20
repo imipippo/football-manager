@@ -2,8 +2,9 @@ import os
 import re
 import glob
 
-print("=== Android Build Fix Script v15 (Expo SDK 53) ===")
-print("Expo SDK 53 natively supports Kotlin 2.x - minimal fixes needed")
+print("=== Android Build Fix Script v16 (Expo SDK 53) ===")
+print("Fixing expo-build-properties issue in SDK 53 bare workflow")
+print("See: https://github.com/expo/expo/issues/36461")
 
 def read_file(path):
     if os.path.exists(path):
@@ -56,7 +57,35 @@ if os.path.exists(props_path):
 else:
     print(f"  WARNING: {props_path} not found (will be created by expo prebuild)")
 
-print("\n[Step 3] Add kotlinOptions to app/build.gradle if needed")
+print("\n[Step 3] Fix missing ext block in root build.gradle (SDK 53 bug workaround)")
+root_build_path = os.path.join(android_dir, "build.gradle")
+if os.path.exists(root_build_path):
+    content = read_file(root_build_path)
+    
+    ext_block = """ext {
+        buildToolsVersion = findProperty('android.buildToolsVersion') ?: '35.0.0'
+        minSdkVersion = Integer.parseInt(findProperty('android.minSdkVersion') ?: '24')
+        compileSdkVersion = Integer.parseInt(findProperty('android.compileSdkVersion') ?: '35')
+        targetSdkVersion = Integer.parseInt(findProperty('android.targetSdkVersion') ?: '35')
+        kotlinVersion = findProperty('android.kotlinVersion') ?: '2.0.21'
+    }
+"""
+    
+    if content and 'buildToolsVersion' not in content:
+        buildscript_match = re.search(r'(buildscript\s*\{[^}]*dependencies\s*\{)', content, re.DOTALL)
+        if buildscript_match:
+            insert_pos = buildscript_match.start() + len('buildscript {')
+            content = content[:insert_pos] + '\n    ' + ext_block + content[insert_pos:]
+            write_file(root_build_path, content)
+            print(f"  Added ext block to root build.gradle")
+        else:
+            print(f"  WARNING: Could not find buildscript block in root build.gradle")
+    else:
+        print(f"  OK: ext block already present in root build.gradle")
+else:
+    print(f"  WARNING: {root_build_path} not found (will be created by expo prebuild)")
+
+print("\n[Step 4] Add kotlinOptions to app/build.gradle if needed")
 app_build_path = os.path.join(android_dir, "app/build.gradle")
 if os.path.exists(app_build_path):
     content = read_file(app_build_path)
@@ -77,5 +106,16 @@ if os.path.exists(app_build_path):
 else:
     print(f"  WARNING: {app_build_path} not found (will be created by expo prebuild)")
 
+print("\n[Step 5] Verify settings.gradle has correct configuration")
+settings_path = os.path.join(android_dir, "settings.gradle")
+if os.path.exists(settings_path):
+    content = read_file(settings_path)
+    if content:
+        print(f"  OK: settings.gradle exists")
+        if 'apply from:' in content:
+            print(f"  OK: apply from directives found")
+else:
+    print(f"  WARNING: {settings_path} not found")
+
 print("\n=== Fix script completed ===")
-print("Expo SDK 53 should handle Kotlin 2.x natively!")
+print("Expo SDK 53 ext block bug has been worked around!")

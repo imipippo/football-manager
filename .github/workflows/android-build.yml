@@ -105,8 +105,12 @@ jobs:
           if ! grep -q 'debuggableVariants = \[\]' android/app/build.gradle; then
             sed -i '/^react {/a\    debuggableVariants = []' android/app/build.gradle
           fi
+          echo "=== Adding extraPackagerArgs for Hermes bytecode compilation ==="
+          if ! grep -q 'extraPackagerArgs' android/app/build.gradle; then
+            sed -i '/debuggableVariants = \[\]/a\    extraPackagerArgs = ["--bytecode"]' android/app/build.gradle
+          fi
           echo "=== Verifying change ==="
-          grep -A5 "react {" android/app/build.gradle
+          grep -A8 "react {" android/app/build.gradle
 
       - name: Fix Gradle version
         working-directory: mobile/android

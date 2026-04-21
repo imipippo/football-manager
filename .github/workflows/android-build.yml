@@ -97,6 +97,14 @@ jobs:
           echo "=== App build.gradle ==="
           cat android/app/build.gradle
 
+      - name: Enable JS bundling for Debug APK
+        working-directory: mobile
+        run: |
+          echo "=== Adding bundleInDebug = true to app/build.gradle ==="
+          sed -i '/^react {/a\    bundleInDebug = true' android/app/build.gradle
+          echo "=== Verifying change ==="
+          grep -A3 "react {" android/app/build.gradle
+
       - name: Fix Gradle version
         working-directory: mobile/android
         run: |

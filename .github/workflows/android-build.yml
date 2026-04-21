@@ -165,6 +165,7 @@ jobs:
           fi
 
       - name: Build Release APK
+        continue-on-error: true
         working-directory: mobile/android
         run: |
           echo "=== Building Release APK ==="

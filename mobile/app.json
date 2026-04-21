@@ -27,6 +27,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.footballmanager.app"
     },
+    "jsEngine": "hermes",
     "android": {
       "package": "com.footballmanager.app"
     },

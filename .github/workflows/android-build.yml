@@ -100,10 +100,13 @@ jobs:
       - name: Enable JS bundling for Debug APK
         working-directory: mobile
         run: |
-          echo "=== Adding bundleInDebug = true to app/build.gradle ==="
-          sed -i '/^react {/a\    bundleInDebug = true' android/app/build.gradle
+          echo "=== Setting debuggableVariants = [] to force JS bundling in Debug ==="
+          sed -i 's|//   debuggableVariants = \["liteDebug", "prodDebug"\]|debuggableVariants = []|' android/app/build.gradle
+          if ! grep -q 'debuggableVariants = \[\]' android/app/build.gradle; then
+            sed -i '/^react {/a\    debuggableVariants = []' android/app/build.gradle
+          fi
           echo "=== Verifying change ==="
-          grep -A3 "react {" android/app/build.gradle
+          grep -A5 "react {" android/app/build.gradle
 
       - name: Fix Gradle version
         working-directory: mobile/android

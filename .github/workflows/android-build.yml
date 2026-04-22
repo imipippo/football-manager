@@ -109,16 +109,40 @@ jobs:
           sed -i '/^react {/a\    debuggableVariants = []' android/app/build.gradle
           
           echo ""
+          echo "=== Checking hermesCommand in react {} block ==="
+          grep -i "hermesCommand" android/app/build.gradle || echo "hermesCommand not found in build.gradle"
+          
+          echo ""
           echo "=== Ensuring hermesEnabled=true in gradle.properties ==="
+          echo "=== Before modification ==="
+          grep -i "hermes" android/gradle.properties || echo "No hermes-related properties found"
+          
           sed -i '/hermesEnabled/d' android/gradle.properties
           echo "" >> android/gradle.properties
           echo "hermesEnabled=true" >> android/gradle.properties
-          echo "=== gradle.properties last 5 lines ==="
-          tail -5 android/gradle.properties
+          
+          echo ""
+          echo "=== After modification ==="
+          grep -i "hermes" android/gradle.properties || echo "No hermes-related properties found"
+          echo "=== gradle.properties full content ==="
+          cat android/gradle.properties
           
           echo ""
           echo "=== Modified react {} block ==="
-          grep -A25 "^react {" android/app/build.gradle || echo "react {} block not found"
+          grep -A30 "^react {" android/app/build.gradle || echo "react {} block not found"
+          
+          echo ""
+          echo "=== Checking Hermes compiler location ==="
+          HERMES_DIR="node_modules/react-native/sdks/hermesc"
+          if [ -d "$HERMES_DIR" ]; then
+            echo "Found hermesc directory: $HERMES_DIR"
+            ls -la "$HERMES_DIR" 2>/dev/null || echo "Cannot list directory"
+            find "$HERMES_DIR" -name "hermesc" -o -name "hermesc.exe" 2>/dev/null || echo "hermesc binary not found"
+          else
+            echo "hermesc directory not found at $HERMES_DIR"
+            echo "Searching for hermesc in node_modules..."
+            find node_modules -name "hermesc" -o -name "hermesc.exe" 2>/dev/null | head -10 || echo "hermesc not found"
+          fi
 
       - name: Fix Gradle version
         working-directory: mobile/android
@@ -159,11 +183,31 @@ jobs:
         working-directory: mobile/android
         run: |
           echo "=== Building Debug APK ==="
+          echo "=== Checking hermesEnabled property ==="
+          ./gradlew properties --no-daemon 2>/dev/null | grep -i hermes || echo "No hermes property found"
+          
+          echo ""
+          echo "=== Listing available tasks ==="
+          ./gradlew tasks --all --no-daemon 2>/dev/null | grep -i "bundle\|hermes" || echo "No bundle/hermes tasks found"
+          
           export NODE_OPTIONS="--max-old-space-size=4096"
           export GRADLE_OPTS="-Xmx4608m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8 -Dorg.gradle.internal.http.connectionTimeout=60000 -Dorg.gradle.internal.http.socketTimeout=60000"
-          ./gradlew assembleDebug --no-daemon --stacktrace --no-build-cache 2>&1 | tee ../gradle-debug.log
+          ./gradlew assembleDebug --no-daemon --stacktrace --no-build-cache --info 2>&1 | tee ../gradle-debug.log
           EXIT_CODE=${PIPESTATUS[0]}
           echo "Debug exit code: $EXIT_CODE"
+          
+          echo ""
+          echo "=== Checking generated bundle ==="
+          if [ -f "app/build/generated/assets/react/debug/index.android.bundle" ]; then
+            echo "Bundle file exists"
+            echo "Bundle size: $(stat -c%s 'app/build/generated/assets/react/debug/index.android.bundle' 2>/dev/null || echo 'unknown')"
+            echo "Bundle first 100 bytes (hex):"
+            head -c 100 "app/build/generated/assets/react/debug/index.android.bundle" | xxd 2>/dev/null || head -c 100 "app/build/generated/assets/react/debug/index.android.bundle"
+          else
+            echo "Bundle file not found at expected location"
+            find app/build -name "*.bundle" 2>/dev/null || echo "No bundle files found"
+          fi
+          
           if [ $EXIT_CODE -ne 0 ]; then
             echo "DEBUG BUILD FAILED!"
             echo ""

@@ -100,17 +100,18 @@ jobs:
       - name: Enable JS bundling for Debug APK
         working-directory: mobile
         run: |
-          echo "=== Setting debuggableVariants = [] to force JS bundling in Debug ==="
-          sed -i 's|//   debuggableVariants = \["liteDebug", "prodDebug"\]|debuggableVariants = []|' android/app/build.gradle
-          if ! grep -q 'debuggableVariants = \[\]' android/app/build.gradle; then
-            sed -i '/^react {/a\    debuggableVariants = []' android/app/build.gradle
-          fi
-          echo "=== Adding extraPackagerArgs for Hermes bytecode compilation ==="
-          if ! grep -q 'extraPackagerArgs' android/app/build.gradle; then
-            sed -i '/debuggableVariants = \[\]/a\    extraPackagerArgs = ["--bytecode"]' android/app/build.gradle
-          fi
-          echo "=== Verifying change ==="
-          grep -A8 "react {" android/app/build.gradle
+          echo "=== Modifying react {} block for Debug APK bundling ==="
+          echo "=== Original react {} block ==="
+          grep -A20 "^react {" android/app/build.gradle || echo "react {} block not found"
+          
+          echo ""
+          echo "=== Adding debuggableVariants and extraPackagerArgs ==="
+          sed -i '/^react {/a\    debuggableVariants = []' android/app/build.gradle
+          sed -i '/debuggableVariants = \[\]/a\    extraPackagerArgs = ["--bytecode"]' android/app/build.gradle
+          
+          echo ""
+          echo "=== Modified react {} block ==="
+          grep -A25 "^react {" android/app/build.gradle || echo "react {} block not found"
 
       - name: Fix Gradle version
         working-directory: mobile/android

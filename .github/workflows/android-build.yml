@@ -109,8 +109,10 @@ jobs:
           sed -i '/^react {/a\    debuggableVariants = []' android/app/build.gradle
           
           echo ""
-          echo "=== Verifying hermesEnabled in gradle.properties ==="
-          grep "hermesEnabled" android/gradle.properties || echo "hermesEnabled not found"
+          echo "=== Ensuring hermesEnabled=true in gradle.properties ==="
+          sed -i '/hermesEnabled/d' android/gradle.properties
+          echo "hermesEnabled=true" >> android/gradle.properties
+          grep "hermesEnabled" android/gradle.properties
           
           echo ""
           echo "=== Modified react {} block ==="

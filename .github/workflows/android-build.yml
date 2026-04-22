@@ -105,9 +105,12 @@ jobs:
           grep -A20 "^react {" android/app/build.gradle || echo "react {} block not found"
           
           echo ""
-          echo "=== Adding debuggableVariants and extraPackagerArgs ==="
+          echo "=== Adding debuggableVariants = [] ==="
           sed -i '/^react {/a\    debuggableVariants = []' android/app/build.gradle
-          sed -i '/debuggableVariants = \[\]/a\    extraPackagerArgs = ["--bytecode"]' android/app/build.gradle
+          
+          echo ""
+          echo "=== Verifying hermesEnabled in gradle.properties ==="
+          grep "hermesEnabled" android/gradle.properties || echo "hermesEnabled not found"
           
           echo ""
           echo "=== Modified react {} block ==="
